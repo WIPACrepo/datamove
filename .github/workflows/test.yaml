@@ -1,0 +1,21 @@
+name: cargo test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Project
+      uses: actions/checkout@v3.5.3
+
+    - name: Execute all unit and integration tests and build examples of a local package
+      run: |
+        cargo test --jobs $(nproc)

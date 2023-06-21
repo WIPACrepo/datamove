@@ -18,7 +18,7 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        apt install musl-tools --yes
+        sudo apt install musl-tools --yes
 
     - name: Compile a local package and all of its dependencies
       run: |

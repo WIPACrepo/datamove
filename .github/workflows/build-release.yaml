@@ -19,6 +19,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt install musl-tools --yes
+        rustup target add x86_64-unknown-linux-musl
 
     - name: Compile a local package and all of its dependencies
       run: |

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# workbench
+
+export RUST_LOG=${RUST_LOG:="trace"}
+
+cargo run --all-features --bin workbench --frozen --target=x86_64-unknown-linux-musl

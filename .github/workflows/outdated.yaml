@@ -19,4 +19,4 @@ jobs:
     - name: Check if dependencies are out of date
       run: |
         cargo install cargo-outdated
-        cargo outdated --exit-code 1 --packages oauth2
+        cargo outdated --exit-code 1 --packages env_logger,log,oauth2

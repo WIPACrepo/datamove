@@ -18,13 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: rustup update stable && rustup default stable
+      - run: cargo outdated --root-deps-only --exit-code 1
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --locked
       - run: cargo generate-lockfile --locked
       - run: cargo check --locked
+      - run: cargo clippy --locked
       - run: cargo verify-project --locked
-      - run: cargo install cargo-outdated
-      - run: cargo outdated --root-deps-only --exit-code 1
 
   test:
     name: Test

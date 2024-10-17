@@ -18,7 +18,7 @@ jobs:
       uses: docker/metadata-action@v4
       with:
         images: |
-          ghcr.io/wipacrepo/wipac-disk-tracking
+          ghcr.io/wipacrepo/datamove
         flavor: |
           latest=auto
         tags: |

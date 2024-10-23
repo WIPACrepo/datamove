@@ -1,0 +1,456 @@
+# jadeite-disk-archiver.txt
+#
+# This document contains a kind of pseudo-code schematic for the
+# operation of the DiskArchiver component of jadeite 2.39.0. This
+# provides a blueprint for the construction of the replacement
+# component in the datamove repository.
+
+
+
+edu.wisc.icecube.jade.engine.Jade
+    main(args)
+        + context
+        + process = context.get(args[0])
+        process.run()
+
+
+
+edu.wisc.icecube.jade.process.archiver.disk.JadeDiskArchiver
+    run()
+        - ensure host
+        - create thread pool
+        + worker
+        - schedule worker in thread pool
+        - start Spark (for REST API /status)
+
+    getStatus()
+
+
+
+edu.wisc.icecube.jade.process.archiver.disk.DiskArchiverWorkerImpl
+    run() // inherited from edu.wisc.icecube.jade.process.WorkerImpl
+        runSafely()
+            - determine host
+            - parse disk archives
+            closeOnSemaphore()
+                for-each(disk-archive-paths)
+                    if(closeSemaphore.exists()) {
+                        closeCopyPath(disk-archive-path)
+                            getDiskLabelUuid
+                            writeArchivalDiskMetadata(disk-archive-path, labelUuid)
+                                DB.loadDiskByUuid(labelUuid)
+                                create ArchivalDiskMetadata
+                                write ArchivalDiskMetadata to disk/labelUuid
+                            DB.closeByUuid(labelUuid)
+                            getDiskByUuid(labelUuid)
+                            sendEmailStreamingDiskEnded(disk-archive-path, disk)
+                                + build up data-object
+                                + load template
+                                parseFreeMarkerTemplate(template, data-object)
+                                sendEmail(recipients, subject, text)
+                            purgeDiskCache = true
+                    }
+            executeScan()
+                listFiles(inboxDir).filter(startsWith(KEY_PREFIX))
+            processScan()
+                for-each(files)
+                    getFilePairUuid
+                    DB.findByUuid
+                    retVal.push(row)
+            archiveFilePairsToDisk(filePairs, host, diskArchives)
+                for-each(filePairs)
+                    archiveFilePairToDisk(filePair, host, diskArchives)
+                        for-each(diskArchives)
+                            for-each(numCopies)
+                                archiveFilePairToDiskCopy(filePair, host, diskArchive, copyId)
+                                    findOrCreateArchivalCopy(host, diskArchive, copyId)
+                                        findArchivalCopy(host, diskArchive, copyId)
+                                        if(no-archival-copy) {
+                                            createArchivalCopy(host, diskArchive, copyId)
+                                            findArchivalCopy(host, diskArchive, copyId)
+                                        }
+                                    addFilePairToCopyPath(filePair, destDisk)
+                                        addFilePairToDisk(diskLabel, filePair)
+                    moveArchiveFileToDiskCache()
+            if(purgeDiskCache) {
+                purgeDiskCache()
+                    listFiles(cacheDir)
+                    for-each(files)
+                        getFilePairUuid
+                        DB.findByUuid
+                        for-each(disk-archives)
+                            canBePurgedFromDiskCache(file, diskArchive)
+                                diskArchive.getNumCopies()
+                                file.getUuid()
+                                getDiskClosedCopyCount(uuid, diskArchive)
+                                    for-each(file.disks)
+                                        isBad -> continue
+                                        isClosed==false -> continue
+                                        no-archive -> continue
+                                        archive!=diskArchive -> continue
+                                        copyCount++
+                                closedCopyCount >= numCopies
+                        if(purgeOk) {
+                            file.delete()
+                        }
+            }
+
+
+
+Configuration Variables (JadeDiskArchiver)
+    @Value("${disk.archiver.dir.cache}")
+    private File diskArchiverDirCache;
+            
+    @Value("${disk.archiver.dir.inbox}")
+    private File diskArchiverDirInbox;
+
+    @Value("${disk.archiver.status.port}")
+    private int diskArchiverStatusPort;
+    
+    @Value("${disk.archiver.thread.count}")
+    private int diskArchiverThreadCount;
+    
+    @Value("${disk.archiver.thread.delay.initial}")
+    private long diskArchiverThreadDelayInitial;
+
+    @Value("${disk.archiver.thread.delay.repeat}")
+    private long diskArchiverThreadDelayRepeat;
+
+    @Value("${disk.archiver.thread.name.format}")
+    private String diskArchiverThreadNameFormat;
+
+    @Value("${jade.hostname}")
+    private String hostname;
+
+    @Value("${disk.archiver.dir.problem.files}")
+    private File problemFilesDirectory;
+
+
+
+Configuration Variables (DiskArchiverWorkerImpl)
+    @Value("${disk.archiver.dir.cache}")
+    private String diskArchiverDirCache;
+    
+    @Value("${disk.archiver.dir.inbox}")
+    private String diskArchiverDirInbox;
+    
+    @Value("${disk.archiver.dir.problem.files}")
+    private String diskArchiverDirProblemFiles;
+    
+    @Value("${disk.archiver.metadata.maximum.size}")
+    private long diskArchiverMetadataMaximumSize;
+
+    @Value("${disk.archiver.timeout.ls}")
+    private long diskArchiverTimeoutLs;
+    
+    @Value("${disk.archiver.timeout.lsblk}")
+    private long diskArchiverTimeoutLsblk;
+
+    @Value("${disk.archiver.timeout.mountpoint}")
+    private long diskArchiverTimeoutMountpoint;
+
+    @Value("${jade.hostname}")
+    private String hostname;
+    
+    @Value("${command.ls}")         private String LS_COMMAND;
+    @Value("${command.lsblk}")      private String LSBLK_COMMAND;
+    @Value("${command.mountpoint}") private String MOUNTPOINT_COMMAND;
+
+
+
+public class ArchivalDiskMetadata
+{
+    public long capacity;
+    public int copyId;
+    public long dateCreated;
+    public long dateUpdated;
+    public String diskArchiveUuid;
+    public ArchivalDiskFile[] files;
+    public long id;
+    public String label;
+    public String uuid;
+}
+
+
+
+public class ArchivalDiskFile
+{
+    public String archiveChecksum;
+    public String archiveFile;
+    public long archiveSize;
+    public String binaryFile;
+    public long binarySize;
+    public long dataStreamId;
+    public String dataStreamUuid;
+    public String dataWarehousePath;
+    public long dateCreated;
+    public long dateFetched;
+    public long dateProcessed;
+    public long dateUpdated;
+    public long dateVerified;
+    public DIFPlus DIF_Plus;
+    public int diskCount;
+    public String fetchChecksum;
+    public String fetchedByHost;
+    public String fingerprint;
+//    public long id;
+    public String metadataFile;
+    public String originChecksum;
+    public long originModificationDate;
+    public String semaphoreFile;
+    public String uuid;
+    public String xmlMetadata;
+}
+
+
+
+[Tue Oct 22 21:45:13 jade@jade02 log]$jade status disk-archiver --live
+{
+  "cacheAge": 800035,
+  "inboxAge": 38,
+  "problemFileCount": 0,
+  "status": "OK",
+  "inboxCount": 0,
+  "archivalDisks": {
+    "/mnt/slot12": {
+      "status": "Not Mounted",
+      "id": 0
+    },
+    "/mnt/slot7": {
+      "status": "Available",
+      "id": 0,
+      "available": true
+    },
+    "/mnt/slot8": {
+      "status": "Not Mounted",
+      "id": 0
+    },
+    "/mnt/slot10": {
+      "status": "Not Mounted",
+      "id": 0
+    },
+    "/mnt/slot5": {
+      "status": "Available",
+      "id": 0,
+      "available": true
+    },
+    "/mnt/slot11": {
+      "status": "Not Mounted",
+      "id": 0
+    },
+    "/mnt/slot6": {
+      "status": "Available",
+      "id": 0,
+      "available": true
+    },
+    "/mnt/slot3": {
+      "status": "In-Use",
+      "id": 1685,
+      "closed": false,
+      "copyId": 2,
+      "onHold": false,
+      "uuid": "8e49c095-7702-4f22-92c5-4b4d5d2bb76f",
+      "archive": "IceCube Disk Archive",
+      "label": "IceCube_2_2024_0108"
+    },
+    "/mnt/slot4": {
+      "status": "In-Use",
+      "id": 1683,
+      "closed": false,
+      "copyId": 1,
+      "onHold": false,
+      "uuid": "29affab2-2469-4d70-a1c8-4b2e67294437",
+      "archive": "IceCube Disk Archive",
+      "label": "IceCube_1_2024_0102"
+    },
+    "/mnt/slot1": {
+      "status": "Finished",
+      "id": 1659,
+      "closed": true,
+      "copyId": 1,
+      "onHold": false,
+      "uuid": "8464d018-60d5-4fbb-bd00-30a15f0c32ed",
+      "archive": "IceCube Disk Archive",
+      "label": "IceCube_1_2024_0091"
+    },
+    "/mnt/slot2": {
+      "status": "Available",
+      "id": 0,
+      "available": true
+    },
+    "/mnt/slot9": {
+      "status": "Not Mounted",
+      "id": 0
+    }
+  }
+}
+
+
+
+[Tue Oct 22 21:45:24 jade@jade02 log]$jade status disk-archiver --json
+{
+  "workers": [
+    {
+      "archivalDisks": {
+        "/mnt/slot12": {
+          "status": "Not Mounted",
+          "id": 0
+        },
+        "/mnt/slot7": {
+          "status": "Available",
+          "id": 0,
+          "available": true
+        },
+        "/mnt/slot8": {
+          "status": "Not Mounted",
+          "id": 0
+        },
+        "/mnt/slot10": {
+          "status": "Not Mounted",
+          "id": 0
+        },
+        "/mnt/slot5": {
+          "status": "Available",
+          "id": 0,
+          "available": true
+        },
+        "/mnt/slot11": {
+          "status": "Not Mounted",
+          "id": 0
+        },
+        "/mnt/slot6": {
+          "status": "Available",
+          "id": 0,
+          "available": true
+        },
+        "/mnt/slot3": {
+          "status": "In-Use",
+          "id": 1685,
+          "closed": false,
+          "copyId": 2,
+          "onHold": false,
+          "uuid": "8e49c095-7702-4f22-92c5-4b4d5d2bb76f",
+          "archive": "IceCube Disk Archive",
+          "label": "IceCube_2_2024_0108"
+        },
+        "/mnt/slot4": {
+          "status": "In-Use",
+          "id": 1683,
+          "closed": false,
+          "copyId": 1,
+          "onHold": false,
+          "uuid": "29affab2-2469-4d70-a1c8-4b2e67294437",
+          "archive": "IceCube Disk Archive",
+          "label": "IceCube_1_2024_0102"
+        },
+        "/mnt/slot1": {
+          "status": "Finished",
+          "id": 1659,
+          "closed": true,
+          "copyId": 1,
+          "onHold": false,
+          "uuid": "8464d018-60d5-4fbb-bd00-30a15f0c32ed",
+          "archive": "IceCube Disk Archive",
+          "label": "IceCube_1_2024_0091"
+        },
+        "/mnt/slot2": {
+          "status": "Available",
+          "id": 0,
+          "available": true
+        },
+        "/mnt/slot9": {
+          "status": "Not Mounted",
+          "id": 0
+        }
+      },
+      "inboxCount": 5
+    }
+  ],
+  "cacheAge": 800130,
+  "inboxAge": 33,
+  "problemFileCount": 0,
+  "status": "OK"
+}
+
+
+
+public class JadeProcessStatus
+{
+    public static final String STATUS_CRITICAL = "CRITICAL";
+    public static final String STATUS_FULL_STOP = "FULL_STOP";
+    public static final String STATUS_OK = "OK";
+    public static final String STATUS_UNKNOWN = "UNKNOWN";
+
+    public long cacheAge;
+    public long inboxAge;
+    public String message;
+    public int problemFileCount;
+    public String status;
+}
+
+public class JadeDiskArchiverStatus extends JadeProcessStatus
+{
+    public DiskArchiverWorkerStatus[] workers;
+}
+
+public class WorkerStatus
+{
+    public int inboxCount;
+}
+
+public class DiskArchiverWorkerStatus extends WorkerStatus
+{
+    public Map<String,DiskStatus> archivalDisks;
+}
+
+public class DiskStatus
+{
+    public String status;
+    public long id;
+    public Boolean closed;
+    public Integer copyId;
+    public Boolean onHold;
+    public String uuid;
+    public String archive;
+    public Boolean available;
+    public String label;
+}
+
+
+
+public class LiveDiskArchiverStatus
+{
+    public LiveDiskArchiverStatus(JadeDiskArchiverStatus jdas)
+    {
+        if(jdas == null) { return; }
+        cacheAge = jdas.cacheAge;
+        inboxAge = jdas.inboxAge;
+        message = jdas.message;
+        problemFileCount = jdas.problemFileCount;
+        status = jdas.status;
+        
+        if(jdas.workers == null) { return; }
+        if(jdas.workers.length < 1) { return; }
+        inboxCount = jdas.workers[0].inboxCount;
+        archivalDisks = jdas.workers[0].archivalDisks;
+    }
+
+    // JadeProcessStatus
+    public long cacheAge;
+    public long inboxAge;
+    public String message;
+    public int problemFileCount;
+    public String status;
+    
+    // JadeDiskArchiverStatus.workers
+    public int inboxCount;
+    public Map<String,DiskStatus> archivalDisks;
+}
+
+
+
+Rust ideas:
+- Use crate `nix` to avoid a shell out to `mountpoint`
+- Use crate `sha2` to avoid a shell out to `sha512sum`
+- Use crate `lettre` to send simple e-mails
+- Use crate `diesel` or `sea-orm` for JADE DB (MySQL) interactions

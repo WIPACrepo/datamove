@@ -3,3 +3,6 @@
 
 # don't version rustfmt backup files
 **/*.rs.bk
+
+# don't version my notes
+/NOTES.md

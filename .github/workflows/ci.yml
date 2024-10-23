@@ -22,7 +22,7 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo generate-lockfile --locked
       - run: cargo check --locked
-      - run: cargo clippy --locked
+      - run: cargo clippy --locked -- --deny warnings
       - run: cargo verify-project --locked
 
   test:

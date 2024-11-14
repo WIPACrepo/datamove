@@ -1,0 +1,16 @@
+# datamove.example.toml
+# This is an example configuration; please copy to `datamove.toml` and fill
+# with your own configuration values
+
+[jade_database]
+host = "127.0.0.1"
+port = 3306
+username = "jade"
+password = "hunter2"
+database_name = "jade"
+
+[sps_disk_archiver]
+archive_path = "/mnt/slot1"
+max_threads = 5
+retry_attempts = 3
+work_cycle_sleep_seconds = 5

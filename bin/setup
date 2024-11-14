@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# setup
+
+if ! dpkg -l | grep -q libmysqlclient-dev; then
+    echo "libmysqlclient-dev is not installed. Installing..."
+    sudo apt update
+    sudo apt install libmysqlclient-dev --yes
+fi
+
+if ! dpkg -l | grep -q libncurses5-dev; then
+    echo "libncurses5-dev is not installed. Installing..."
+    sudo apt update
+    sudo apt install libncurses5-dev --yes
+fi
+
+if ! dpkg -l | grep -q libstdc++-12-dev; then
+    echo "libstdc++-12-dev is not installed. Installing..."
+    sudo apt update
+    sudo apt install libstdc++-12-dev
+fi
+
+cargo install diesel_cli --no-default-features --features mysql

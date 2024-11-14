@@ -6,3 +6,6 @@
 
 # don't version my notes
 /NOTES.md
+
+# don't version production configuration
+datamove.toml

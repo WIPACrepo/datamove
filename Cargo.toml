@@ -1,13 +1,19 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.0.1"
+version = "0.0.2"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
 publish = false
 
 [dependencies]
+chrono = "0.4.38"
+diesel = { version = "2.2.4", features = ["chrono", "mysql"] }
 env_logger = "0.11.5"
+hostname = "0.4.0"
 log = "0.4.22"
-oauth2 = "4.4.2"
+mysqlclient-sys = { version = "0.4.1" } # , features = ["bundled"] }
+serde = { version = "1.0.215", features = ["derive"] }
+tokio = { version = "1.41.1", features = ["full"] }
+toml = "0.8.19"

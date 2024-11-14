@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# disk_archiver
+
+export DATAMOVE_CONFIG=${DATAMOVE_CONFIG:="datamove.toml"}
+export RUST_LOG=${RUST_LOG:="trace"}
+
+cargo run --all-features --bin disk_archiver --frozen

@@ -17,9 +17,8 @@ pub fn load_context() -> Context {
     let datamove_config_path =
         std::env::var("DATAMOVE_CONFIG").expect("Expected environment variable: DATAMOVE_CONFIG");
     // load the TOML configuration file
-    let datamove_config_text = fs::read_to_string(&datamove_config_path).unwrap_or_else(|_| panic!(
-        "Failed to read configuration file: '{datamove_config_path}'"
-    ));
+    let datamove_config_text = fs::read_to_string(&datamove_config_path)
+        .unwrap_or_else(|_| panic!("Failed to read configuration file: '{datamove_config_path}'"));
     // deserialize the TOML configuration file
     let datamove_config: DatamoveConfiguration =
         toml::from_str(&datamove_config_text).expect("Failed to parse configuration text");

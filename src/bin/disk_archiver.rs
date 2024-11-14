@@ -1,6 +1,6 @@
 // disk_archiver.rs
 
-#![feature(trivial_bounds)]
+// #![feature(trivial_bounds)]
 #![forbid(unsafe_code)]
 
 use log::{error, info, warn};

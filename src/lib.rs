@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod sps;
+pub mod status;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

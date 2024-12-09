@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::sps::models::JadeDisk;
+
 // --------------------------------------------------------------------------
 // -- disk_archiver ---------------------------------------------------------
 // --------------------------------------------------------------------------
@@ -19,7 +21,7 @@ pub struct DiskArchiverStatus {
     pub inbox_age: u64,
 
     #[serde(rename = "problemFileCount")]
-    pub problem_file_count: u32,
+    pub problem_file_count: u64,
 
     #[serde(rename = "message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -34,7 +36,7 @@ pub struct DiskArchiverWorkerStatus {
     pub archival_disks: HashMap<String, Disk>,
 
     #[serde(rename = "inboxCount")]
-    pub inbox_count: u32,
+    pub inbox_count: u64,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -42,13 +44,13 @@ pub struct Disk {
     pub status: DiskStatus,
 
     #[serde(rename = "id")]
-    pub id: u64,
+    pub id: i64,
 
     #[serde(rename = "closed", skip_serializing_if = "Option::is_none")]
     pub closed: Option<bool>,
 
     #[serde(rename = "copyId", skip_serializing_if = "Option::is_none")]
-    pub copy_id: Option<u32>,
+    pub copy_id: Option<i32>,
 
     #[serde(rename = "onHold", skip_serializing_if = "Option::is_none")]
     pub on_hold: Option<bool>,
@@ -67,6 +69,56 @@ pub struct Disk {
 
     #[serde(rename = "serial", skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
+}
+
+impl Disk {
+    pub fn for_status(status: DiskStatus) -> Self {
+        Disk {
+            status,
+            id: 0,
+            closed: None,
+            copy_id: None,
+            on_hold: None,
+            uuid: None,
+            archive: None,
+            available: None,
+            label: None,
+            serial: None,
+        }
+    }
+}
+
+impl TryFrom<JadeDisk> for Disk {
+    type Error = Box<dyn core::error::Error>;
+
+    fn try_from(value: JadeDisk) -> Result<Self, Self::Error> {
+        let closed: bool = value
+            .closed
+            .expect("Database returned NULL for jade_disk.closed")
+            .into();
+        let on_hold: bool = value
+            .on_hold
+            .expect("Database returned NULL for jade_disk.on_hold")
+            .into();
+        let status = if closed {
+            DiskStatus::Finished
+        } else {
+            DiskStatus::InUse
+        };
+        // return the Disk
+        Ok(Disk {
+            status,
+            id: value.jade_disk_id,
+            closed: Some(closed),
+            copy_id: value.copy_id,
+            on_hold: Some(on_hold),
+            uuid: value.uuid,
+            archive: value.disk_archive_uuid,
+            available: Some(!closed),
+            label: value.label,
+            serial: None, // TODO: need to add this!!
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -109,13 +161,13 @@ pub struct LiveDiskArchiverStatus {
     pub message: Option<String>,
 
     #[serde(rename = "problemFileCount")]
-    pub problem_file_count: u32,
+    pub problem_file_count: u64,
 
     #[serde(rename = "status", skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
 
     #[serde(rename = "inboxCount")]
-    pub inbox_count: u32,
+    pub inbox_count: u64,
 
     #[serde(rename = "archivalDisks")]
     pub archival_disks: HashMap<String, Disk>,

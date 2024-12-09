@@ -3,12 +3,16 @@
 use diesel::prelude::*;
 use log::info;
 use std::fs;
+use std::sync::{Arc, Mutex};
 
 use crate::config::DatamoveConfiguration;
 
+type SharedDatabase = Arc<Mutex<MysqlConnection>>;
+
+#[derive(Clone)]
 pub struct Context {
     pub config: DatamoveConfiguration,
-    pub db: MysqlConnection,
+    pub db: SharedDatabase,
     pub hostname: String,
 }
 
@@ -33,6 +37,7 @@ pub fn load_context() -> Context {
     // db: set up the database connection
     let database_url = format!("mysql://{username}:{password}@{host}:{port}/{database_name}");
     let connection = MysqlConnection::establish(&database_url).unwrap();
+    let db = Arc::new(Mutex::new(connection));
 
     // hostname: determine the hostname running the process
     let full_hostname = hostname::get().expect("Failed to get hostname");
@@ -46,7 +51,7 @@ pub fn load_context() -> Context {
     // return the application Context object to the caller
     Context {
         config: datamove_config.clone(),
-        db: connection,
+        db,
         hostname: hostname.to_string(),
     }
 }

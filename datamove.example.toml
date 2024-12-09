@@ -10,7 +10,33 @@ password = "hunter2"
 database_name = "jade"
 
 [sps_disk_archiver]
-archive_path = "/mnt/slot1"
-max_threads = 5
-retry_attempts = 3
+# The number of bytes to leave free before considering the disk to be
+# "full". Note that this value is subtracted from the free space on an
+# archival disk, so it should be set high enough to allow useful
+# activity, but low enough not to waste archival disk space.
+#     Unit: bytes
+archive_headroom = 10000000000
+
+# The cache path where the DiskArchiver will store data files until it
+# can confirm they are written to a sufficient number of closed copies.
+cache_dir = "/mnt/data/jade/disk_cache"
+
+# Configuration of the disk archives
+disk_archives_json_path = "/mnt/data/jade/etc/diskArchives.json"
+
+# The inbox path where the DiskArchiver will consume archive files
+# that should be sent to archival disks.
+inbox_dir = "/mnt/data/jade/disk_queue"
+
+# The problem files directory where the disk archiver should
+# place files that it is having a difficult time processing.
+problem_files_dir = "/mnt/data/jade/problem_files/disk-archiver"
+
+# The port used by the component to listen and respond to requests
+# for status information.
+status_port = 13002
+
+# The delay after a work cycle completes, before a disk archiver
+# begins to perform work again.
+#     Unit: seconds
 work_cycle_sleep_seconds = 5

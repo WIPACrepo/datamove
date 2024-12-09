@@ -8,13 +8,19 @@ edition = "2021"
 publish = false
 
 [dependencies]
-chrono = "0.4.38"
-diesel = { version = "2.2.4", features = ["chrono", "mysql"] }
+axum = { version = "0.7.9", features = ["macros"] }
+axum-extra = { version = "0.9.6", features = [ "erased-json" ] }
+chrono = "0.4.39"
+diesel = { version = "2.2.6", features = ["chrono", "mysql"] }
 env_logger = "0.11.5"
 hostname = "0.4.0"
 log = "0.4.22"
-mysqlclient-sys = { version = "0.4.1" } # , features = ["bundled"] }
+mysqlclient-sys = { version = "0.4.2" } # , features = ["bundled"] }
+regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.132"
-tokio = { version = "1.41.1", features = ["full"] }
+serde_json = "1.0.133"
+tokio = { version = "1.42.0", features = ["full"] }
 toml = "0.8.19"
+
+[dev-dependencies]
+filetime = "0.2.25"

@@ -38,6 +38,31 @@ impl FromSql<diesel::sql_types::Binary, Mysql> for BitBool {
 }
 
 // --------------------------------------------------------------------------
+// -- jade_disk -------------------------------------------------------------
+// --------------------------------------------------------------------------
+
+#[derive(Clone, Queryable, Selectable)]
+#[diesel(table_name = crate::sps::schema::jade_disk)]
+#[diesel(check_for_backend(diesel::mysql::Mysql))]
+pub struct JadeDisk {
+    pub jade_disk_id: i64,
+    pub bad: Option<BitBool>,
+    pub capacity: Option<i64>,
+    pub closed: Option<BitBool>,
+    pub copy_id: Option<i32>,
+    pub date_created: Option<chrono::NaiveDateTime>,
+    pub date_updated: Option<chrono::NaiveDateTime>,
+    pub device_path: Option<String>,
+    pub label: Option<String>,
+    pub on_hold: Option<BitBool>,
+    pub uuid: Option<String>,
+    pub version: Option<i64>,
+    pub jade_host_id: Option<i64>,
+    pub disk_archive_uuid: Option<String>,
+    pub hardware_metadata: Option<String>,
+}
+
+// --------------------------------------------------------------------------
 // -- jade_host -------------------------------------------------------------
 // --------------------------------------------------------------------------
 

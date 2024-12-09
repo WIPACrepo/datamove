@@ -6,7 +6,7 @@ use diesel::prelude::*;
 use log::{error, info, trace, warn};
 
 use crate::sps::context::Context;
-use crate::sps::models::{JadeHost, NewJadeHost};
+use crate::sps::models::{JadeDisk, JadeHost, NewJadeHost};
 use crate::sps::models::{MYSQL_FALSE, MYSQL_TRUE};
 
 pub type Error = Box<dyn core::error::Error>;
@@ -16,28 +16,65 @@ pub type Result<T> = core::result::Result<T, Error>;
 // -- Database API ----------------------------------------------------------
 // --------------------------------------------------------------------------
 
-pub fn ensure_host(context: &mut Context) -> Result<JadeHost> {
+pub fn ensure_host(context: &Context) -> Result<JadeHost> {
     trace!("ensure_host({})", context.hostname);
-    let conn = &mut context.db;
+    let mut conn = match context.db.lock() {
+        Ok(conn) => conn,
+        Err(x) => return Err(format!("Unable to lock MysqlConnection: {x}").into()),
+    };
     let hostname = &context.hostname;
 
     // if we already have this host in the database
-    if let Some(host) = select_host_by_hostname(conn, hostname)? {
+    if let Some(host) = select_host_by_hostname(&mut conn, hostname)? {
         // return it to the caller
         return Ok(host);
     }
 
     // otherwise, we need to create the host in the database
-    insert_host(conn, hostname)?;
+    insert_host(&mut conn, hostname)?;
 
     // now let's return the host that we just created
-    if let Some(host) = select_host_by_hostname(conn, hostname)? {
+    if let Some(host) = select_host_by_hostname(&mut conn, hostname)? {
         return Ok(host);
     }
 
     // oops, something has gone very wrong...
     error!("Unable to find row for host_name '{hostname}' after insert into table jade_host");
     Err("Unable to ensure_host".into())
+}
+
+// --------------------------------------------------------------------------
+// -- jade_disk -------------------------------------------------------------
+// --------------------------------------------------------------------------
+
+pub fn select_disk_by_uuid(
+    conn: &mut MysqlConnection,
+    find_uuid: &str,
+) -> Result<Option<JadeDisk>> {
+    trace!("select_disk_by_uuid({find_uuid})");
+    use crate::sps::schema::jade_disk::dsl::*;
+
+    // query the DB to find the row for the provided hostname
+    // SQL: select * from jade_disk where uuid = $uuid order jade_host_id limit 1;
+    let disks = jade_disk
+        .select(JadeDisk::as_select())
+        .filter(uuid.eq(find_uuid))
+        .order(jade_disk_id)
+        .limit(1)
+        .load(conn)?;
+
+    // if we got more than one row back, log a warning about that
+    if disks.len() > 1 {
+        warn!("Multiple rows returned from jade_disk for uuid = '{find_uuid}'")
+    }
+
+    // we found it (hopefully only one), so return it to the caller
+    if !disks.is_empty() {
+        return Ok(Some(disks[0].clone()));
+    }
+
+    // oops, we did not find anything
+    Ok(None)
 }
 
 // --------------------------------------------------------------------------

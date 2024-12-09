@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# init-docker-mysql
+
+# create the container and import the JADE database backup
+docker run \
+    --env=MYSQL_DATABASE="jade" \
+    --env=MYSQL_PASSWORD="hunter2" \
+    --env=MYSQL_ROOT_PASSWORD="hunter2" \
+    --env=MYSQL_USER="jade" \
+    --name=sps-jade-20231226 \
+    --publish 3306:3306 \
+    --volume ${PWD}/sql:/docker-entrypoint-initdb.d:ro \
+    mariadb:latest

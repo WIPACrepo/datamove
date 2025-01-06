@@ -25,7 +25,7 @@
 /// While the have a length (unlike the zero length files), the
 /// contents of the file appear to be all zero bytes (0x00).
 ///
-/// /// Solution
+/// Solution
 ///
 /// Both jade (SPS) and jadenorth store filename and checksum
 /// information in their databases. By generating a checksum file, any

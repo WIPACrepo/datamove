@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# run-docker-warehouse_check
+
+export DEBUG_DELAY_SECONDS=${DEBUG_DELAY_SECONDS:="0"}
+export INBOX_DIR=${INBOX_DIR:="/data/user/jade/warehouse_check/inbox"}
+export OUTBOX_DIR=${OUTBOX_DIR:="/data/user/jade/warehouse_check/finished"}
+export QUARANTINE_DIR=${QUARANTINE_DIR:="/data/user/jade/warehouse_check/quarantine"}
+export RUN_ONCE_AND_DIE=${RUN_ONCE_AND_DIE:="true"}
+export RUST_LOG=${RUST_LOG:="trace"}
+export WORK_DIR=${WORK_DIR:="/data/user/jade/warehouse_check/work"}
+export WORK_SLEEP_SECONDS=${WORK_SLEEP_SECONDS:="60"}
+
+docker run \
+    --env DEBUG_DELAY_SECONDS="${DEBUG_DELAY_SECONDS}" \
+    --env INBOX_DIR="${INBOX_DIR}" \
+    --env OUTBOX_DIR="${OUTBOX_DIR}" \
+    --env QUARANTINE_DIR="${QUARANTINE_DIR}" \
+    --env RUN_ONCE_AND_DIE="${RUN_ONCE_AND_DIE}" \
+    --env RUST_LOG="${RUST_LOG}" \
+    --env WORK_DIR="${WORK_DIR}" \
+    --env WORK_SLEEP_SECONDS="${WORK_SLEEP_SECONDS}" \
+    --interactive \
+    --name=warehouse-check-$(date +%s%N) \
+    --rm \
+    --tty \
+    --volume /data/user/jade:/data/user/jade \
+    --volume /home/pmeade/db:/home/pmeade/db:ro \
+    datamove:latest \
+    /app/warehouse_check

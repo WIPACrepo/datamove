@@ -1,7 +1,7 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.0.1"
+version = "0.1.0"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
@@ -10,4 +10,3 @@ publish = false
 [dependencies]
 env_logger = "0.11.6"
 log = "0.4.22"
-oauth2 = "4.4.2"

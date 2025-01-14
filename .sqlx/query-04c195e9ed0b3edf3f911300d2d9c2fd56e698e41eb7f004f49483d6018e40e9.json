@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO jade_disk (\n                bad,\n                capacity,\n                closed,\n                copy_id,\n                date_created,\n                date_updated,\n                device_path,\n                label,\n                on_hold,\n                uuid,\n                version,\n                jade_host_id,\n                disk_archive_uuid,\n                hardware_metadata\n            ) VALUES (\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "04c195e9ed0b3edf3f911300d2d9c2fd56e698e41eb7f004f49483d6018e40e9"
+}

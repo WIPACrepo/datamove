@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO jade_host (\n                allow_job_claim,\n                allow_job_work,\n                allow_open_job_claim,\n                date_created,\n                date_heartbeat,\n                date_updated,\n                host_name,\n                satellite_capable,\n                version\n            ) VALUES (\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "5453a13374cb04b6ca70c35c61a84c7160f940926158b7b5253e6344486ba098"
+}

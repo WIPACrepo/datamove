@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod adhoc;
 pub mod config;
 pub mod metadata;
 pub mod sps;

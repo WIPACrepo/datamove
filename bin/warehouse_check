@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# warehouse_check
+
+export DEBUG_DELAY_SECONDS=${DEBUG_DELAY_SECONDS:="0"}
+export INBOX_DIR=${INBOX_DIR:="/data/user/jade/warehouse_check/inbox"}
+export OUTBOX_DIR=${OUTBOX_DIR:="/data/user/jade/warehouse_check/finished"}
+export QUARANTINE_DIR=${QUARANTINE_DIR:="/data/user/jade/warehouse_check/quarantine"}
+export RUN_ONCE_AND_DIE=${RUN_ONCE_AND_DIE:="true"}
+export RUST_LOG=${RUST_LOG:="trace"}
+export WORK_DIR=${WORK_DIR:="/data/user/jade/warehouse_check/work"}
+export WORK_SLEEP_SECONDS=${WORK_SLEEP_SECONDS:="60"}
+
+cargo run --all-features --bin warehouse_check --frozen --release

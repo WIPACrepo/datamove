@@ -1,0 +1,45 @@
+jade has filled an archival disk.
+
+Host:         jade01
+Archive:      IceCube Disk Archive
+
+The filled disk has the following information.
+
+ID:           1884
+Label:        IceCube_2_2024_0062
+Copy:         2
+UUID:         4a976221-f39b-4e5e-a0c6-e4fa7e3e88d5
+
+Started:      Dec 11, 2024 7:10:25 PM
+Finished:     Dec 16, 2024 4:54:59 PM
+Rate:         14,025,813 bytes/sec
+
+Host:         jade01
+Device:       /mnt/slot4
+Free:         7,245,053,952 bytes
+Total:        5,952,694,763,520 bytes
+
+File Count:   32,351
+Data Size:    5,945,177,808,502 bytes
+
+Please unmount, remove, and safely store this disk.
+
+Capacity Update:
+
+(0) Not Mounted:
+(0) Not Usable:
+(7) Available:
+    /mnt/slot7
+    /mnt/slot12
+    /mnt/slot8
+    /mnt/slot10
+    /mnt/slot6
+    /mnt/slot11
+    /mnt/slot9
+(1) In-Use:
+    /mnt/slot5 ID:1885 [IceCube Disk Archive]
+(4) Finished:
+    /mnt/slot3 ID:1883 [IceCube Disk Archive]
+    /mnt/slot4 ID:1884 [IceCube Disk Archive]
+    /mnt/slot1 ID:1881 [IceCube Disk Archive]
+    /mnt/slot2 ID:1882 [IceCube Disk Archive]

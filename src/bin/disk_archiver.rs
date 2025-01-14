@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::{net::TcpListener, sync::Notify, try_join};
 
 use wipac_datamove::sps::{context::load_context, process::disk_archiver::DiskArchiver};
-use wipac_datamove::status::net::{get_disk_archiver_status, post_shutdown_disk_archiver};
+use wipac_datamove::status::net::{get_status_disk_archiver, post_shutdown_disk_archiver};
 
 #[tokio::main]
 async fn main() {
@@ -20,7 +20,7 @@ async fn main() {
     // create a new DiskArchiver
     let context = load_context();
     let status_port = context.config.sps_disk_archiver.status_port;
-    let disk_archiver = Arc::new(DiskArchiver::new(context));
+    let disk_archiver = Arc::new(DiskArchiver::new(context).await);
     let shutdown_notify = Arc::new(Notify::new());
 
     // start an Axum server to provide JSON status responses
@@ -38,7 +38,7 @@ async fn main() {
                 "/shutdown",
                 post(move |state| post_shutdown_disk_archiver(state, sn_notify)),
             )
-            .route("/status", get(get_disk_archiver_status))
+            .route("/status", get(get_status_disk_archiver))
             .with_state(da);
         // start the status service
         info!(

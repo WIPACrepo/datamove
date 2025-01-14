@@ -7,7 +7,7 @@ docker run \
     --env=MYSQL_PASSWORD="hunter2" \
     --env=MYSQL_ROOT_PASSWORD="hunter2" \
     --env=MYSQL_USER="jade" \
-    --name=sps-jade-20231226 \
+    --name=sps-jade-2025xxxx \
     --publish 3306:3306 \
     --volume ${PWD}/sql:/docker-entrypoint-initdb.d:ro \
     mariadb:latest

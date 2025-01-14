@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# prepare-sqlx
+
+DATABASE_URL="mysql://jade:hunter2@127.0.0.1/jade" cargo sqlx prepare
+

@@ -4,18 +4,27 @@ use log::{error, info, warn};
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tera::Tera;
 use tokio::time::{sleep, Duration};
 
-use crate::config::DiskArchives;
-use crate::sps::database::select_disk_by_uuid;
+use crate::config::{load_contacts, load_disk_archives, Contacts, DiskArchives};
+use crate::metadata::ArchivalDiskMetadata;
+use crate::sps::email::{
+    comma_separated_filter, compile_templates, send_email_streaming_disk_ended,
+};
+use crate::sps::jade_db::service::disk::close as close_disk;
+use crate::sps::jade_db::service::disk::find_by_uuid as find_disk_by_uuid;
+use crate::sps::jade_db::service::disk::JadeDisk;
+use crate::sps::jade_db::service::host::ensure_host;
+use crate::sps::jade_db::service::host::JadeHost;
 use crate::sps::utils::{get_file_count, get_oldest_file_age_in_secs, is_mount_point};
 use crate::status::sps::{Disk, DiskArchiverStatus, DiskStatus};
-use crate::{
-    sps::{context::Context, database::ensure_host, models::JadeHost},
-    status::sps::DiskArchiverWorkerStatus,
-};
+use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
+
+pub const CLOSE_SEMAPHORE_NAME: &str = "close.me";
 
 pub type SharedFlag = Arc<Mutex<bool>>;
 
@@ -24,26 +33,40 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone)]
 pub struct DiskArchiver {
+    pub contacts: Contacts,
     pub context: Context,
     pub disk_archives: DiskArchives,
     pub host: JadeHost,
     pub shutdown: SharedFlag,
+    pub tera: Tera,
 }
 
 impl DiskArchiver {
-    pub fn new(context: Context) -> Self {
-        let host =
-            ensure_host(&context).expect("Unable to determine JadeHost running DiskArchiver");
+    pub async fn new(context: Context) -> Self {
+        let host = ensure_host(&context.db_pool, &context.hostname)
+            .await
+            .expect("Unable to determine JadeHost running DiskArchiver");
+
+        let contacts_json_path = &context.config.sps_disk_archiver.contacts_json_path;
+        let contacts = load_contacts(contacts_json_path)
+            .expect("Unable to load contacts from JSON configuration");
 
         let disk_archives_json_path = &context.config.sps_disk_archiver.disk_archives_json_path;
         let disk_archives = load_disk_archives(disk_archives_json_path)
             .expect("Unable to load disk_archives from JSON configuration");
 
+        let tera_template_glob = &context.config.sps_disk_archiver.tera_template_glob;
+        let mut tera =
+            compile_templates(tera_template_glob).expect("Unable to compile Tera templates");
+        tera.register_filter("comma", comma_separated_filter);
+
         Self {
+            contacts,
             context,
             disk_archives,
             host,
             shutdown: Arc::new(Mutex::new(false)),
+            tera,
         }
     }
 
@@ -95,7 +118,7 @@ impl DiskArchiver {
     }
 }
 
-fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &str) -> Disk {
+async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &str) -> Disk {
     // ostensibly, this is a path to an archival disk. now let's put it
     // through the gauntlet and see what we've really got here...
     let path = Path::new(disk_path);
@@ -147,31 +170,12 @@ fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &str) -> 
         return Disk::for_status(DiskStatus::Available);
     }
     // there is exactly one label, so look up database information about that disk
-    let mut conn = match disk_archiver.context.db.lock() {
-        Ok(conn) => conn,
-        Err(x) => {
-            error!("Unable to lock MysqlConnection: {x}");
-            return Disk::for_status(DiskStatus::NotUsable);
-        }
-    };
+    let pool = &disk_archiver.context.db_pool;
     let find_uuid = &disk_labels[0];
-    let disk = match select_disk_by_uuid(&mut conn, find_uuid) {
-        Ok(disk) => {
-            if let Some(disk) = disk {
-                disk
-            } else {
-                error!(
-                    "Database table jade_disk has no entry for uuid '{}'.",
-                    find_uuid
-                );
-                return Disk::for_status(DiskStatus::NotUsable);
-            }
-        }
-        Err(_) => {
-            error!(
-                "Unable to read database table jade_disk for uuid '{}'.",
-                find_uuid
-            );
+    let disk = match find_disk_by_uuid(pool, find_uuid).await {
+        Ok(disk) => disk,
+        Err(e) => {
+            error!("Did not find JadeDisk for uuid '{find_uuid}' due to: {e}.");
             return Disk::for_status(DiskStatus::NotUsable);
         }
     };
@@ -189,22 +193,15 @@ fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &str) -> 
     }
 }
 
-fn build_archival_disks_status(disk_archiver: &DiskArchiver) -> HashMap<String, Disk> {
+async fn build_archival_disks_status(disk_archiver: &DiskArchiver) -> HashMap<String, Disk> {
     // create a hashmap to hold our archival disks
     let mut archival_disks = HashMap::new();
 
-    // gather up all the paths we're configured to use
-    let mut disk_path_set: BTreeSet<String> = BTreeSet::new();
-    for disk_archive in &disk_archiver.disk_archives.disk_archives {
-        for path in &disk_archive.paths {
-            disk_path_set.insert(path.to_string());
-        }
-    }
-    let disk_paths: Vec<String> = disk_path_set.into_iter().collect();
-
-    // for each disk path
+    // for each configured disk path
+    let disk_paths = get_disk_paths(disk_archiver);
     for disk_path in disk_paths {
-        let disk = build_archival_disk_status(disk_archiver, &disk_path);
+        // determine the status of the disk and put it in the map
+        let disk = build_archival_disk_status(disk_archiver, &disk_path).await;
         archival_disks.insert(disk_path, disk);
     }
 
@@ -247,10 +244,7 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
     let inbox_age = match get_oldest_file_age_in_secs(inbox_dir) {
         Ok(age) => age,
         Err(e) => {
-            error!(
-                "Unable to determine age of oldest file in the inbox directory: {}",
-                e
-            );
+            error!("Unable to determine age of oldest file in the inbox directory: {e}");
             0
         }
     };
@@ -266,7 +260,7 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
         }
     };
 
-    let archival_disks = build_archival_disks_status(disk_archiver);
+    let archival_disks = build_archival_disks_status(disk_archiver).await;
 
     DiskArchiverStatus {
         workers: vec![DiskArchiverWorkerStatus {
@@ -281,25 +275,92 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
     }
 }
 
-pub async fn do_work_cycle(_disk_archiver: &DiskArchiver) -> Result<()> {
+pub async fn close_disk_by_path(disk_archiver: &DiskArchiver, disk_path: &str) -> Result<()> {
+    // close the disk on the provided mount path
+    info!("Closing disk: {}", disk_path);
+    // determine the UUID label of the disk
+    let path = Path::new(disk_path);
+    let labels = read_disk_labels(path)?;
+    if labels.is_empty() {
+        error!("Attempted to read_disk_labels for {disk_path}, but no labels were found!");
+        return Err(format!(
+            "Attempted to read_disk_labels for {disk_path}, but no labels were found!"
+        )
+        .into());
+    }
+    let find_uuid = &labels[0];
+    // look up the disk in the database
+    let pool = &disk_archiver.context.db_pool;
+    let disk = find_disk_by_uuid(pool, find_uuid).await?;
+    // write disk metadata to the UUID label
+    let label_path = path.join(find_uuid);
+    if let Err(e) = write_archival_disk_metadata(&label_path, &disk) {
+        error!("Unable to write disk metadata to disk {disk_path} label file {find_uuid}: {e}.");
+        return Err(format!(
+            "Unable to write disk metadata to disk {disk_path} label file {find_uuid}: {e}."
+        )
+        .into());
+    }
+    // close the disk
+    close_disk(pool, &disk).await?;
+    // reload the disk from the database
+    let disk = find_disk_by_uuid(pool, find_uuid).await?;
+    // send an email about the disk closure
+    send_email_streaming_disk_ended(disk_archiver, &label_path, &disk)?;
+    // indicate to the caller that we succeeded
+    Ok(())
+}
+
+pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) {
+    // for each disk path
+    let disk_paths = get_disk_paths(disk_archiver);
+    for disk_path in disk_paths {
+        // determine the path of the close semaphore for this disk
+        let path = Path::new(&disk_path);
+        let close_semaphore_path = path.join(CLOSE_SEMAPHORE_NAME);
+        // TODO: trace!("Checking close semaphore {}", close_semaphore_path.display());
+        // determine if the close semaphore exists or not
+        let exists = match std::fs::exists(&close_semaphore_path) {
+            Ok(exists) => exists,
+            Err(e) => {
+                error!(
+                    "Unable to determine if close semaphore '{}' exists: {e}",
+                    close_semaphore_path.display()
+                );
+                continue;
+            }
+        };
+        // if the close semaphore exists
+        if exists {
+            // close the disk
+            info!("Found close semaphore: {}", close_semaphore_path.display());
+            let _ = close_disk_by_path(disk_archiver, &disk_path).await; // TODO: handle this properly!
+        }
+    }
+}
+
+pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
     // start the work cycle
     info!("Starting DiskArchiver work cycle.");
 
     warn!("Doing some important DiskArchiver work here.");
+    close_on_semaphore(disk_archiver).await;
 
     // finish the work cycle successfully
     info!("End of DiskArchiver work cycle.");
     Ok(())
 }
 
-fn load_disk_archives(path: &str) -> Result<DiskArchives> {
-    // open the disk archives JSON configuration file
-    let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
-    // deserialize the JSON into the DiskArchives structure
-    let disk_archives: DiskArchives =
-        serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
-    // return the DiskArchives structure to the caller
-    Ok(disk_archives)
+fn get_disk_paths(disk_archiver: &DiskArchiver) -> Vec<String> {
+    // put all the configured paths into a set
+    let mut disk_path_set: BTreeSet<String> = BTreeSet::new();
+    for disk_archive in &disk_archiver.disk_archives.disk_archives {
+        for path in &disk_archive.paths {
+            disk_path_set.insert(path.to_string());
+        }
+    }
+    // gather up all the paths we're configured to use
+    disk_path_set.into_iter().collect()
 }
 
 fn read_disk_labels(path: &Path) -> Result<Vec<String>> {
@@ -327,16 +388,37 @@ fn read_disk_labels(path: &Path) -> Result<Vec<String>> {
     Ok(disk_labels)
 }
 
+fn write_archival_disk_metadata(label_path: &Path, disk: &JadeDisk) -> Result<()> {
+    // create a structure for the serialized form of disk metadata
+    let metadata: ArchivalDiskMetadata = disk.into();
+
+    // serialize the metadata struct to the label path
+    let json = serde_json::to_string_pretty(&metadata)?;
+    let mut file = File::create(label_path)?;
+    file.write_all(json.as_bytes())?;
+
+    // inform the caller that we succeeded
+    Ok(())
+}
+
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
 
     #[test]
     fn test_always_succeed() {
         assert!(true);
+    }
+
+    #[test]
+    fn test_close_semaphore_join() {
+        let path = Path::new("/mnt/slot1");
+        let close_semaphore_path = path.join(CLOSE_SEMAPHORE_NAME);
+        let close_path = close_semaphore_path.to_str().unwrap();
+        assert_eq!(close_path, "/mnt/slot1/close.me");
     }
 }

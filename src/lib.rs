@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod metadata;
 pub mod sps;
 pub mod status;
 

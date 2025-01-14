@@ -23,6 +23,7 @@ jobs:
       - run: cargo generate-lockfile --locked
       - run: cargo clippy --locked -- --deny warnings
       - run: cargo verify-project --locked
+      - run: cargo doc --no-deps
 
   test:
     name: Test

@@ -8,19 +8,27 @@ edition = "2021"
 publish = false
 
 [dependencies]
-axum = { version = "0.7.9", features = ["macros"] }
-axum-extra = { version = "0.9.6", features = [ "erased-json" ] }
-chrono = "0.4.39"
-diesel = { version = "2.2.6", features = ["chrono", "mysql"] }
-env_logger = "0.11.5"
+axum = { version = "0.8.1", features = ["macros"] }
+axum-extra = { version = "0.10.0", features = ["erased-json"] }
+chrono = { version = "0.4.39", features = ["serde"] }
+# diesel = { version = "2.2.6", features = ["chrono", "mysql"] }
+env_logger = "0.11.6"
+fs2 = "0.4.3"
 hostname = "0.4.0"
-log = "0.4.22"
-mysqlclient-sys = { version = "0.4.2" } # , features = ["bundled"] }
+# lettre = "0.11"
+log = "0.4.25"
+# mysqlclient-sys = { version = "0.4.2" } # , features = ["bundled"] }
+num-format = "0.4"
+num-traits = "0.2.19"
 regex = "1.11.1"
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
-tokio = { version = "1.42.0", features = ["full"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.135"
+sqlx = { version = "0.8.3", features = ["bigdecimal", "mysql", "runtime-tokio", "time"] }
+tera = "1.19"
+time = "0.3.37"
+tokio = { version = "1.43.0", features = ["full"] }
 toml = "0.8.19"
 
 [dev-dependencies]
 filetime = "0.2.25"
+lazy_static = "1.5.0"

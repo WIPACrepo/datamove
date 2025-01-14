@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::sps::models::JadeDisk;
+use crate::sps::jade_db::service::disk::JadeDisk;
 
 // --------------------------------------------------------------------------
 // -- disk_archiver ---------------------------------------------------------
@@ -73,6 +73,13 @@ pub struct Disk {
 
 impl Disk {
     pub fn for_status(status: DiskStatus) -> Self {
+        // if this is an Available disk, set the available flag
+        let available = if status == DiskStatus::Available {
+            Some(true)
+        } else {
+            None
+        };
+        // return the disk for the requested status
         Disk {
             status,
             id: 0,
@@ -81,7 +88,7 @@ impl Disk {
             on_hold: None,
             uuid: None,
             archive: None,
-            available: None,
+            available,
             label: None,
             serial: None,
         }
@@ -92,14 +99,8 @@ impl TryFrom<JadeDisk> for Disk {
     type Error = Box<dyn core::error::Error>;
 
     fn try_from(value: JadeDisk) -> Result<Self, Self::Error> {
-        let closed: bool = value
-            .closed
-            .expect("Database returned NULL for jade_disk.closed")
-            .into();
-        let on_hold: bool = value
-            .on_hold
-            .expect("Database returned NULL for jade_disk.on_hold")
-            .into();
+        let closed: bool = value.closed;
+        let on_hold: bool = value.on_hold;
         let status = if closed {
             DiskStatus::Finished
         } else {
@@ -110,12 +111,12 @@ impl TryFrom<JadeDisk> for Disk {
             status,
             id: value.jade_disk_id,
             closed: Some(closed),
-            copy_id: value.copy_id,
+            copy_id: Some(value.copy_id),
             on_hold: Some(on_hold),
-            uuid: value.uuid,
-            archive: value.disk_archive_uuid,
-            available: Some(!closed),
-            label: value.label,
+            uuid: Some(value.uuid),
+            archive: Some(value.disk_archive_uuid),
+            available: None, // a disk from the database is already claimed (never available)
+            label: Some(value.label),
             serial: None, // TODO: need to add this!!
         })
     }

@@ -9,7 +9,7 @@ use tokio::sync::Notify;
 
 use crate::sps::process::disk_archiver::DiskArchiver;
 
-pub async fn get_disk_archiver_status(State(state): State<Arc<DiskArchiver>>) -> impl IntoResponse {
+pub async fn get_status_disk_archiver(State(state): State<Arc<DiskArchiver>>) -> impl IntoResponse {
     let disk_archiver_status = state.get_status().await;
     ErasedJson::pretty(disk_archiver_status)
 }

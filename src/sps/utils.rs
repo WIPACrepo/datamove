@@ -1,5 +1,7 @@
 // utils.rs
 
+use fs2::{free_space, total_space};
+use log::error;
 use std::cmp::max;
 use std::fs;
 use std::path::Path;
@@ -47,6 +49,17 @@ pub fn get_file_count(directory: &str) -> Result<u64> {
     }
     // return the total count of files to the caller
     Ok(file_count)
+}
+
+/// TODO: write documentation comment
+pub fn get_free_space(volume: &str) -> Result<u64> {
+    match free_space(volume) {
+        Ok(free) => Ok(free),
+        Err(e) => {
+            error!("Unable to determine free_space for '{volume}' due to: {e}");
+            Err(e.into())
+        }
+    }
 }
 
 /// Determine the age of the oldest file in the provided directory, in seconds.
@@ -101,14 +114,23 @@ pub fn get_oldest_file_age_in_secs(directory: &str) -> Result<u64> {
     Ok(oldest_age)
 }
 
+/// TODO: write documentation comment
+pub fn get_total_space(volume: &str) -> Result<u64> {
+    match total_space(volume) {
+        Ok(free) => Ok(free),
+        Err(e) => {
+            error!("Unable to determine total_space for '{volume}' due to: {e}");
+            Err(e.into())
+        }
+    }
+}
+
 /// Determine if the provided path is a mount point or not.
 ///
 /// This function runs the system command `mountpoint`, which reads the
 /// file `/proc/self/mountinfo` to determine if the mount is listed there.
 /// If it finds the path listed there, it will end with status code 0.
 /// A non-zero status code indicates an error (1) or not a mountpoint (32).
-///
-/// If no files are found, it returns 0 as the age.
 ///
 /// # Arguments
 ///

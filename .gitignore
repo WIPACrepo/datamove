@@ -10,5 +10,11 @@
 # don't version production configuration
 datamove.toml
 
+# don't version the .sqlx directory
+/.sqlx
+
+# don't version the image directory
+/image
+
 # don't version the sql directory
 /sql

@@ -1,18 +1,15 @@
 // context.rs
 
-use diesel::prelude::*;
 use log::info;
+use sqlx::MySqlPool;
 use std::fs;
-use std::sync::{Arc, Mutex};
 
 use crate::config::DatamoveConfiguration;
-
-type SharedDatabase = Arc<Mutex<MysqlConnection>>;
 
 #[derive(Clone)]
 pub struct Context {
     pub config: DatamoveConfiguration,
-    pub db: SharedDatabase,
+    pub db_pool: MySqlPool,
     pub hostname: String,
 }
 
@@ -33,11 +30,11 @@ pub fn load_context() -> Context {
     let host = &datamove_config.jade_database.host;
     let port = datamove_config.jade_database.port;
     let database_name = &datamove_config.jade_database.database_name;
+    let database_url = format!("mysql://{username}:{password}@{host}:{port}/{database_name}");
 
     // db: set up the database connection
-    let database_url = format!("mysql://{username}:{password}@{host}:{port}/{database_name}");
-    let connection = MysqlConnection::establish(&database_url).unwrap();
-    let db = Arc::new(Mutex::new(connection));
+    let db_pool = MySqlPool::connect_lazy(&database_url)
+        .expect("Unable to create MySqlPool to connect to the database");
 
     // hostname: determine the hostname running the process
     let full_hostname = hostname::get().expect("Failed to get hostname");
@@ -51,7 +48,7 @@ pub fn load_context() -> Context {
     // return the application Context object to the caller
     Context {
         config: datamove_config.clone(),
-        db,
+        db_pool,
         hostname: hostname.to_string(),
     }
 }

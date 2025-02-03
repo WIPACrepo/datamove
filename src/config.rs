@@ -1,7 +1,8 @@
 // config.rs
 
+use lettre::{message::Mailbox, Address};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
+use std::{fs::File, str::FromStr};
 
 pub type Error = Box<dyn core::error::Error>;
 pub type Result<T> = core::result::Result<T, Error>;
@@ -12,8 +13,20 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct DatamoveConfiguration {
+    pub email_configuration: EmailConfig,
     pub jade_database: JadeDatabaseConfig,
     pub sps_disk_archiver: SpsDiskArchiverConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct EmailConfig {
+    pub enabled: bool,
+    pub from: String,
+    pub host: String,
+    pub password: String,
+    pub port: u16,
+    pub reply_to: String,
+    pub username: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -53,6 +66,16 @@ pub struct Contact {
     pub name: String,
     pub email: String,
     pub role: ContactRole,
+}
+
+impl From<&Contact> for Mailbox {
+    fn from(value: &Contact) -> Self {
+        let name = Some(value.name.clone());
+        let email = Address::from_str(&value.email)
+            // .expect(&format!("Invalid e-mail address: {}", value.email));
+            .unwrap_or_else(|_| panic!("Invalid e-mail address: {}", value.email));
+        Mailbox::new(name, email)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

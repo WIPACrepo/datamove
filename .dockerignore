@@ -1,5 +1,29 @@
-Dockerfile
-.dockerignore
+# .dockerignore
+# These files are excluded from commands like COPY, so you can avoid
+# importing multi-GB build directories into your container image, and
+# speed up your build process
+
+# those items commented out ARE processed by docker commands
+# they are listed here (commented out) for completeness sake
+
 .git
-.gitignore
+.github
+# .sqlx
+bin
+doc
+image
+sql
+# src
 target
+tests
+tools
+.dockerignore
+.gitignore
+# Cargo.lock
+# Cargo.toml
+datamove.code-workspace
+datamove.example.toml
+datamove.toml
+Dockerfile
+NOTES.md
+# README.md

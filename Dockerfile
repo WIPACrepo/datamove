@@ -9,4 +9,5 @@ RUN cargo build --release
 # build the final container image
 FROM debian:bookworm-slim AS image
 WORKDIR /app
+COPY --from=build /build/target/release/disk_archiver /app
 COPY --from=build /build/target/release/warehouse_check /app

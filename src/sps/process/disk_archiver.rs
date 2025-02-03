@@ -2,21 +2,20 @@
 
 use log::{error, info, warn};
 use regex::Regex;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tera::Tera;
 use tokio::time::{sleep, Duration};
 
 use crate::config::{load_contacts, load_disk_archives, Contacts, DiskArchives};
 use crate::metadata::ArchivalDiskMetadata;
-use crate::sps::email::{
-    comma_separated_filter, compile_templates, send_email_streaming_disk_ended,
-};
+use crate::sps::email::{comma_separated_filter, compile_templates, send_email_disk_full};
 use crate::sps::jade_db::service::disk::close as close_disk;
 use crate::sps::jade_db::service::disk::find_by_uuid as find_disk_by_uuid;
+use crate::sps::jade_db::service::disk::get_removable_files;
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::service::host::ensure_host;
 use crate::sps::jade_db::service::host::JadeHost;
@@ -74,19 +73,27 @@ impl DiskArchiver {
         build_disk_archiver_status(self).await
     }
 
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self) {
+        // find out how long we need to sleep between work cycles
+        let work_cycle_sleep_seconds = self
+            .context
+            .config
+            .sps_disk_archiver
+            .work_cycle_sleep_seconds;
+
+        // flag: should we stop working and gracefully shut the program down?
         let mut graceful_shutdown = false;
 
         // until a shutdown is requested
         while !graceful_shutdown {
             // perform the work of the disk archiver
-            do_work_cycle(self).await?;
+            if let Err(e) = do_work_cycle(self).await {
+                error!("Error detected during do_work_cycle(): {e}");
+                error!("Will shut down the DiskArchiver.");
+                *self.shutdown.lock().unwrap() = true;
+                break;
+            }
             // sleep until the next work cycle
-            let work_cycle_sleep_seconds = self
-                .context
-                .config
-                .sps_disk_archiver
-                .work_cycle_sleep_seconds;
             info!("Will sleep for {} seconds.", work_cycle_sleep_seconds);
             sleep(Duration::from_secs(work_cycle_sleep_seconds)).await;
             // check if we need to shut down before starting the next work cycle
@@ -99,9 +106,8 @@ impl DiskArchiver {
             };
         }
 
-        // we received a shutdown command
+        // log about the fact that we received a shutdown command
         info!("Initiating graceful shutdown of DiskArchiver.");
-        Ok(())
     }
 
     pub fn request_shutdown(&self) {
@@ -193,7 +199,7 @@ async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &st
     }
 }
 
-async fn build_archival_disks_status(disk_archiver: &DiskArchiver) -> HashMap<String, Disk> {
+pub async fn build_archival_disks_status(disk_archiver: &DiskArchiver) -> HashMap<String, Disk> {
     // create a hashmap to hold our archival disks
     let mut archival_disks = HashMap::new();
 
@@ -275,6 +281,34 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
     }
 }
 
+pub async fn clean_disk_cache(disk_archiver: &DiskArchiver) -> Result<()> {
+    // goal: clean the disk cache of files we no longer need to retain
+    let cache_dir = &disk_archiver.context.config.sps_disk_archiver.cache_dir;
+    info!("Cleaning disk cache: {}", cache_dir);
+
+    // get all the UUIDs of the files currently on disk
+    let cache_path = PathBuf::from(cache_dir);
+    let disk_set = extract_uuids_from_cache(&cache_path)?;
+    info!("Cache: Found {} files to check.", disk_set.len());
+
+    // ask the database which files are copied to N archival disks, limited to files
+    // contained on the finished disks that are currently loaded on the JADE machine
+    let pool = &disk_archiver.context.db_pool;
+    let disk_ids = get_loaded_disk_ids(disk_archiver).await;
+    let required_copies = get_required_copies(disk_archiver)?;
+    let database_set = get_removable_files(pool, &disk_ids, required_copies).await?;
+    info!("DB: Found {} files ready for removal.", database_set.len());
+
+    // take the intersection of the files we've got and the files we can delete
+    let delete_set: HashSet<String> = disk_set.intersection(&database_set).cloned().collect();
+    info!("Remove: Found {} files to be removed.", disk_set.len());
+    remove_uuids_from_cache(&cache_path, &delete_set)?;
+
+    // indicate to the caller that we successfully cleaned the disk cache
+    info!("Disk cache cleaning complete.");
+    Ok(())
+}
+
 pub async fn close_disk_by_path(disk_archiver: &DiskArchiver, disk_path: &str) -> Result<()> {
     // close the disk on the provided mount path
     info!("Closing disk: {}", disk_path);
@@ -306,19 +340,19 @@ pub async fn close_disk_by_path(disk_archiver: &DiskArchiver, disk_path: &str) -
     // reload the disk from the database
     let disk = find_disk_by_uuid(pool, find_uuid).await?;
     // send an email about the disk closure
-    send_email_streaming_disk_ended(disk_archiver, &label_path, &disk)?;
+    send_email_disk_full(disk_archiver, &label_path, &disk).await?;
     // indicate to the caller that we succeeded
     Ok(())
 }
 
-pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) {
+pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) -> Result<()> {
+    info!("Checking for close semaphores on all archival disks");
     // for each disk path
     let disk_paths = get_disk_paths(disk_archiver);
     for disk_path in disk_paths {
         // determine the path of the close semaphore for this disk
         let path = Path::new(&disk_path);
         let close_semaphore_path = path.join(CLOSE_SEMAPHORE_NAME);
-        // TODO: trace!("Checking close semaphore {}", close_semaphore_path.display());
         // determine if the close semaphore exists or not
         let exists = match std::fs::exists(&close_semaphore_path) {
             Ok(exists) => exists,
@@ -334,21 +368,71 @@ pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) {
         if exists {
             // close the disk
             info!("Found close semaphore: {}", close_semaphore_path.display());
-            let _ = close_disk_by_path(disk_archiver, &disk_path).await; // TODO: handle this properly!
+            close_disk_by_path(disk_archiver, &disk_path).await?;
+            // delete the semaphore from the disk
+            info!(
+                "Removing close semaphore: {}",
+                close_semaphore_path.display()
+            );
+            fs::remove_file(close_semaphore_path)?;
         }
     }
+    // tell the caller we succeeded
+    Ok(())
 }
 
 pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
     // start the work cycle
     info!("Starting DiskArchiver work cycle.");
 
+    // check if the operator has requested manual close for any archival disks
+    if let Err(e) = close_on_semaphore(disk_archiver).await {
+        error!("Error occured closing archival disks with close semaphores: {e}");
+        error!("No further work will be performed until the error is handled.");
+        return Err(e);
+    }
+
+    // TODO: the core work cycle of the DiskArchiver
     warn!("Doing some important DiskArchiver work here.");
-    close_on_semaphore(disk_archiver).await;
+
+    // clean the cache of any files included on N archival disks
+    if let Err(e) = clean_disk_cache(disk_archiver).await {
+        error!("Error occured cleaning the disk archival cache: {e}");
+        error!("No further work will be performed until the error is handled.");
+        return Err(e);
+    }
 
     // finish the work cycle successfully
     info!("End of DiskArchiver work cycle.");
     Ok(())
+}
+
+fn extract_uuids_from_cache(cache_dir: &Path) -> Result<HashSet<String>> {
+    // create the set we'll return to the caller
+    let mut uuid_set = HashSet::new();
+    // create a RegEx to match JADE's filename pattern `ukey_$UUID_`
+    let uuid_regex = Regex::new(r"ukey_([a-f0-9-]{36})_").unwrap();
+    // for each directory entry
+    for entry in fs::read_dir(cache_dir)? {
+        // get the filename
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let file_name_str = file_name.to_string_lossy();
+        // extract the UUID
+        if let Some(caps) = uuid_regex.captures(&file_name_str) {
+            if let Some(uuid_match) = caps.get(1) {
+                // add it to our set of UUIDs
+                uuid_set.insert(uuid_match.as_str().to_string());
+            } else {
+                warn!(
+                    "Cannot identify UUID in: {}",
+                    cache_dir.join(file_name_str.to_string()).display()
+                );
+            }
+        }
+    }
+    // return the set of filename UUIDs to the caller
+    Ok(uuid_set)
 }
 
 fn get_disk_paths(disk_archiver: &DiskArchiver) -> Vec<String> {
@@ -361,6 +445,39 @@ fn get_disk_paths(disk_archiver: &DiskArchiver) -> Vec<String> {
     }
     // gather up all the paths we're configured to use
     disk_path_set.into_iter().collect()
+}
+
+async fn get_loaded_disk_ids(disk_archiver: &DiskArchiver) -> Vec<i64> {
+    // create a Vec to hold our results
+    let mut loaded_disk_ids = Vec::new();
+    // check all the disks and gather up their IDs
+    let disks = build_archival_disks_status(disk_archiver).await;
+    for disk in disks.values() {
+        if disk.id != crate::status::sps::NO_ID {
+            loaded_disk_ids.push(disk.id);
+        }
+    }
+    // return the Vec of disk IDs to the caller
+    loaded_disk_ids
+}
+
+fn get_required_copies(disk_archiver: &DiskArchiver) -> Result<u64> {
+    // get the collection of disk archives
+    let archives = &disk_archiver.disk_archives.disk_archives;
+    // handle the case where there are no disk archives
+    let first_value = archives
+        .first()
+        .ok_or("No disk archives provided!")?
+        .num_copies;
+    // check that all disk archives have the same num_copies value
+    if archives
+        .iter()
+        .all(|archive| archive.num_copies == first_value)
+    {
+        Ok(first_value)
+    } else {
+        Err("Inconsistent num_copies among disk archives!".into())
+    }
 }
 
 fn read_disk_labels(path: &Path) -> Result<Vec<String>> {
@@ -386,6 +503,32 @@ fn read_disk_labels(path: &Path) -> Result<Vec<String>> {
 
     // return the list of disk label filenames to the caller
     Ok(disk_labels)
+}
+
+fn remove_uuids_from_cache(cache_path: &Path, delete_set: &HashSet<String>) -> std::io::Result<()> {
+    // create a RegEx to match JADE's filename pattern `ukey_$UUID_`
+    let uuid_regex = Regex::new(r"ukey_([a-f0-9-]{36})_").unwrap();
+    // for each directory entry
+    for entry in fs::read_dir(cache_path)? {
+        // get the filename
+        let entry = entry?;
+        let file_path = entry.path();
+        let file_name = entry.file_name();
+        let file_name_str = file_name.to_string_lossy();
+        // extract the UUID from the filename
+        if let Some(caps) = uuid_regex.captures(&file_name_str) {
+            if let Some(uuid_match) = caps.get(1) {
+                let uuid_str = uuid_match.as_str();
+                // if this uuid is contained in the delete set
+                if delete_set.contains(uuid_str) {
+                    info!("Removing file: {}", file_path.display());
+                    fs::remove_file(&file_path)?;
+                }
+            }
+        }
+    }
+    // tell the caller that we successfully removed files from the cache
+    Ok(())
 }
 
 fn write_archival_disk_metadata(label_path: &Path, disk: &JadeDisk) -> Result<()> {

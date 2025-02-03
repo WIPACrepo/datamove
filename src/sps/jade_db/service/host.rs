@@ -145,7 +145,7 @@ pub async fn find_by_host_name(pool: &MySqlPool, find_host_name: &str) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn test_always_succeed() {

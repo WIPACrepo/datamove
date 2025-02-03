@@ -56,7 +56,7 @@ async fn main() {
     // start the DiskArchiver daemon process
     let da = Arc::clone(&disk_archiver);
     let handle_jade_process = tokio::spawn(async move {
-        da.run().await.unwrap();
+        da.run().await;
     });
 
     // wait for both tasks to complete, if either one has an error

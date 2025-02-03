@@ -1,22 +1,30 @@
 // email.rs
 
-use log::{error, trace};
+use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport};
+use log::{error, info, warn};
 use num_format::{Locale, ToFormattedString};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
 use tera::Result as TeraResult;
 use tera::{from_value, to_value, Context, Tera, Value};
 
-use crate::config::{disk_archive_for_uuid, ContactRole};
+use crate::config::{disk_archive_for_uuid, Contact, ContactRole, EmailConfig};
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::service::disk::{get_num_file_pairs, get_size_file_pairs};
+use crate::sps::process::disk_archiver::build_archival_disks_status;
 use crate::sps::process::disk_archiver::DiskArchiver;
 use crate::sps::utils::{get_free_space, get_total_space};
+use crate::status::sps::{
+    Disk,
+    DiskStatus::{Available, Finished, InUse, NotMounted, NotUsable},
+};
 
 pub type Error = Box<dyn core::error::Error>;
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub const CLOSE_DISK_TEMPLATE: &str = "closeArchiveDisk.tera";
+pub const DISK_FULL_SUBJECT: &str = "Archive Disk Full Notification";
 pub const TERA_RENDER_ERROR: &str = "Something went wrong with Tera.";
 
 #[derive(Serialize)]
@@ -51,6 +59,73 @@ impl From<&JadeDisk> for EmailDisk {
             date_updated,
             path,
         }
+    }
+}
+
+pub struct CapacityUpdate {
+    pub not_mounted_paths: Vec<String>,
+    pub not_usable_paths: Vec<String>,
+    pub available_paths: Vec<String>,
+    pub in_use_paths: Vec<String>,
+    pub finished_paths: Vec<String>,
+}
+
+fn build_capacity_update(
+    disk_archiver: &DiskArchiver,
+    archival_disk_map: &HashMap<String, Disk>,
+) -> CapacityUpdate {
+    // create some containers to hold the status strings
+    let mut not_mounted_paths = Vec::<String>::new();
+    let mut not_usable_paths = Vec::<String>::new();
+    let mut available_paths = Vec::<String>::new();
+    let mut in_use_paths = Vec::<String>::new();
+    let mut finished_paths = Vec::<String>::new();
+
+    // sort the disks into their respective bins by status
+    for (path, disk) in archival_disk_map {
+        match disk.status {
+            NotMounted => {
+                not_mounted_paths.push(path.to_string());
+            }
+            NotUsable => {
+                not_usable_paths.push(path.to_string());
+            }
+            Available => {
+                available_paths.push(path.to_string());
+            }
+            InUse => {
+                // determine the disk archive the disk belongs to
+                let disk_archives = &disk_archiver.disk_archives;
+                let disk_archive_uuid = disk
+                    .archive
+                    .clone()
+                    .expect("Disk missing disk_archive_uuid");
+                let disk_archive = disk_archive_for_uuid(disk_archives, &disk_archive_uuid)
+                    .expect("Disk has unknown disk archive");
+                // add the information to the In-Use paths
+                let info = format!("{} ID:{} [{}]", path, disk.id, &disk_archive.description);
+                in_use_paths.push(info);
+            }
+            Finished => {
+                // determine the disk archive the disk belongs to
+                let archive = disk
+                    .archive
+                    .clone()
+                    .unwrap_or("Unknown Archive".to_string());
+                // add the information to the Finished paths
+                let info = format!("{} ID:{} [{}]", path, disk.id, archive);
+                finished_paths.push(info);
+            }
+        }
+    }
+
+    // return the capacity update information to the caller
+    CapacityUpdate {
+        not_mounted_paths,
+        not_usable_paths,
+        available_paths,
+        in_use_paths,
+        finished_paths,
     }
 }
 
@@ -116,55 +191,20 @@ async fn build_disk_closed_body(
     context.insert("free_bytes", &free_bytes);
     context.insert("total_bytes", &total_bytes);
 
-    // (0) Not Mounted:
-    // (0) Not Usable:
-    // (7) Available:
-    //     /mnt/slot7
-    //     /mnt/slot12
-    //     /mnt/slot8
-    //     /mnt/slot10
-    //     /mnt/slot6
-    //     /mnt/slot11
-    //     /mnt/slot9
-    // (1) In-Use:
-    //     /mnt/slot5 ID:1885 [IceCube Disk Archive]
-    // (4) Finished:
-    //     /mnt/slot3 ID:1883 [IceCube Disk Archive]
-    //     /mnt/slot4 ID:1884 [IceCube Disk Archive]
-    //     /mnt/slot1 ID:1881 [IceCube Disk Archive]
-    //     /mnt/slot2 ID:1882 [IceCube Disk Archive]
-
-    context.insert("not_mounted_paths", &Vec::<String>::new());
-
-    context.insert("not_usable_paths", &Vec::<String>::new());
-
-    context.insert(
-        "available_paths",
-        &vec![
-            "/mnt/slot7",
-            "/mnt/slot12",
-            "/mnt/slot8",
-            "/mnt/slot10",
-            "/mnt/slot6",
-            "/mnt/slot11",
-            "/mnt/slot9",
-        ],
-    );
-
-    context.insert(
-        "in_use_paths",
-        &vec!["/mnt/slot5 ID:1885 [IceCube Disk Archive]"],
-    );
-
-    context.insert(
-        "finished_paths",
-        &vec![
-            "/mnt/slot3 ID:1883 [IceCube Disk Archive]",
-            "/mnt/slot4 ID:1884 [IceCube Disk Archive]",
-            "/mnt/slot1 ID:1881 [IceCube Disk Archive]",
-            "/mnt/slot2 ID:1882 [IceCube Disk Archive]",
-        ],
-    );
+    let archival_disk_map = build_archival_disks_status(disk_archiver).await;
+    let capacity_update = build_capacity_update(disk_archiver, &archival_disk_map);
+    let CapacityUpdate {
+        not_mounted_paths,
+        not_usable_paths,
+        available_paths,
+        in_use_paths,
+        finished_paths,
+    } = capacity_update;
+    context.insert("not_mounted_paths", &not_mounted_paths);
+    context.insert("not_usable_paths", &not_usable_paths);
+    context.insert("available_paths", &available_paths);
+    context.insert("in_use_paths", &in_use_paths);
+    context.insert("finished_paths", &finished_paths);
 
     render_email_body(tera, CLOSE_DISK_TEMPLATE, &context)
 }
@@ -231,28 +271,64 @@ fn render_email_body(tera: &Tera, template_name: &str, context: &Context) -> Str
     }
 }
 
-pub fn send_email_streaming_disk_ended(
+pub async fn send_email_disk_full(
     disk_archiver: &DiskArchiver,
     label_path: &Path,
     disk: &JadeDisk,
 ) -> Result<()> {
-    // first, let's build the email
-    let _body = build_disk_closed_body(disk_archiver, label_path, disk);
-
+    // destructure our EmailConfig into useful variables
+    let EmailConfig {
+        enabled,
+        from,
+        host,
+        password,
+        port,
+        reply_to,
+        username,
+    } = &disk_archiver.context.config.email_configuration;
+    // if email is disabled, don't send any email
+    if !enabled {
+        warn!("In our current configuration, e-mail is disabled. No {DISK_FULL_SUBJECT} e-mail will be sent.");
+        warn!("send_email_disk_full(): email_config.enabled = {enabled}");
+        return Ok(());
+    }
+    // engage our Auto Memories Doll to write a letter for us
+    let mut email = Message::builder()
+        .from(from.parse()?)
+        .reply_to(reply_to.parse()?);
     // obtain the list of human contacts to be informed
     let contacts = &disk_archiver.contacts.contacts;
-
-    // for each contact on the list
-    let email_to = contacts
+    let contacts = contacts
         .iter()
         // keep the ones with the JADE_ADMIN and WINTER_OVER role
         .filter(|x| (x.role == ContactRole::JadeAdmin) || (x.role == ContactRole::WinterOver));
     // for each contact on the list
-    for email_contact in email_to {
-        let name = &email_contact.name;
-        let address = &email_contact.email;
-        trace!("Will send a Streaming Disk Full Notification e-mail to: {name} <{address}>");
+    for email_to in contacts {
+        // log about the recipient
+        let Contact {
+            name,
+            email: address,
+            role: _role,
+        } = email_to;
+        info!("Sending a {DISK_FULL_SUBJECT} e-mail to: {name} <{address}>");
+        // add the recipient to the e-mail
+        email = email.to(email_to.into());
     }
+    // set the subject of the e-mail
+    email = email.subject(DISK_FULL_SUBJECT);
+    // build and set the body to create the e-mail message
+    let email_body = build_disk_closed_body(disk_archiver, label_path, disk).await;
+    let message = email.body(email_body)?;
+    // create an SmtpTransport to use for sending the message
+    let creds = Credentials::new(username.to_owned(), password.to_owned());
+    let mailer = SmtpTransport::relay(host)
+        .unwrap()
+        .credentials(creds)
+        .port(*port)
+        .build();
+    // You've Got Mail!
+    info!("Sending {DISK_FULL_SUBJECT} message.");
+    mailer.send(&message)?;
 
     // indicate to the caller that we succeeded
     Ok(())

@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 use num_traits::cast::ToPrimitive;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, MySqlPool};
+use std::collections::HashSet;
 
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::utils::JadeDatePrimitive;
@@ -160,6 +161,51 @@ pub async fn get_num_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<i
     Ok(result.num_files)
 }
 
+pub async fn get_removable_files(
+    pool: &MySqlPool,
+    loaded_disk_ids: &Vec<i64>,
+    required_copies: u64,
+) -> Result<HashSet<String>> {
+    // create placeholders; 4 ids = ?,?,?,?
+    let placeholders = loaded_disk_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    // create the query text to find files that are sufficiently archived
+    let query_string = format!(
+        "WITH good_disks AS (
+            SELECT jade_disk_id
+            FROM jade_disk
+            WHERE closed = 1 AND bad = 0 AND on_hold = 0
+            AND jade_disk_id IN ({})
+        ),
+        file_copy_counts AS (
+            SELECT jfp.jade_file_pair_uuid, COUNT(*) AS copy_count
+            FROM jade_map_disk_to_file_pair jmdfp
+            JOIN good_disks gd ON jmdfp.jade_disk_id = gd.jade_disk_id
+            JOIN jade_file_pair jfp ON jmdfp.jade_file_pair_id = jfp.jade_file_pair_id
+            GROUP BY jfp.jade_file_pair_uuid
+        )
+        SELECT jade_file_pair_uuid
+        FROM file_copy_counts
+        WHERE copy_count >= ?;",
+        placeholders
+    );
+    // create the query object to run against the database
+    let mut query = sqlx::query_scalar(&query_string);
+    // bind the disk ids to the placeholders we created dynamically
+    for id in loaded_disk_ids {
+        query = query.bind(id);
+    }
+    // bind the required number of copies to the final placeholder
+    query = query.bind(required_copies);
+    // get the list of jade_file_pair_uuid values
+    let jade_file_pair_uuids: Vec<String> = query.fetch_all(pool).await?;
+    // send the list of UUIDs back to the caller in a HashSet
+    Ok(jade_file_pair_uuids.into_iter().collect())
+}
+
 pub async fn get_size_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<i64> {
     let result = sqlx::query!(
         r#"
@@ -237,7 +283,7 @@ pub async fn save(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn test_always_succeed() {

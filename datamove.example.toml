@@ -2,6 +2,15 @@
 # This is an example configuration; please copy to `datamove.toml` and fill
 # with your own configuration values
 
+[email_configuration]
+enabled = true
+from = "spadedev@icecube.wisc.edu"
+host = "mail.icecube.wisc.edu"
+password = "hunter2"
+port = 25
+reply_to = "spadedev@icecube.wisc.edu"
+username = "spadedev@icecube.wisc.edu"
+
 [jade_database]
 host = "127.0.0.1"
 port = 3306

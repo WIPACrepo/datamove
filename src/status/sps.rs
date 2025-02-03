@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use crate::sps::jade_db::service::disk::JadeDisk;
 
+pub const NO_ID: i64 = 0;
+
 // --------------------------------------------------------------------------
 // -- disk_archiver ---------------------------------------------------------
 // --------------------------------------------------------------------------
@@ -82,7 +84,7 @@ impl Disk {
         // return the disk for the requested status
         Disk {
             status,
-            id: 0,
+            id: NO_ID,
             closed: None,
             copy_id: None,
             on_hold: None,

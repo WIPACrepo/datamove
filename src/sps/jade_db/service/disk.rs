@@ -3,9 +3,11 @@
 use chrono::{NaiveDateTime, Utc};
 use log::{error, info, trace};
 use sqlx::MySqlPool;
+use std::collections::HashSet;
 
 use crate::sps::jade_db::repo::disk::find_by_uuid as repo_find_by_uuid;
 use crate::sps::jade_db::repo::disk::get_num_file_pairs as repo_get_num_file_pairs;
+use crate::sps::jade_db::repo::disk::get_removable_files as repo_get_removable_files;
 use crate::sps::jade_db::repo::disk::get_size_file_pairs as repo_get_size_file_pairs;
 use crate::sps::jade_db::repo::disk::save as repo_save;
 use crate::sps::jade_db::repo::disk::MySqlJadeDisk;
@@ -126,6 +128,14 @@ pub async fn get_num_file_pairs(pool: &MySqlPool, jade_disk: &JadeDisk) -> Resul
     repo_get_num_file_pairs(pool, jade_disk.jade_disk_id).await
 }
 
+pub async fn get_removable_files(
+    pool: &MySqlPool,
+    loaded_disk_ids: &Vec<i64>,
+    required_copies: u64,
+) -> Result<HashSet<String>> {
+    repo_get_removable_files(pool, loaded_disk_ids, required_copies).await
+}
+
 pub async fn get_size_file_pairs(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<i64> {
     repo_get_size_file_pairs(pool, jade_disk.jade_disk_id).await
 }
@@ -141,7 +151,7 @@ pub async fn save(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn test_always_succeed() {

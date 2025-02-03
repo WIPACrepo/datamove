@@ -17,20 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.cargo/bin
-          key: cargo-bin-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: lint-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-bin-cache-${{ runner.os }}-
+            lint-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            lint-cache-${{ runner.os }}-
       - run: rustup update stable && rustup default stable
-      - name: Run cargo install cargo-outdated
+      - run: tools/ci/check_rust_deps
+      - name: Run cargo install cargo-machete
         run: |
-          if [ ! -f ~/.cargo/bin/cargo-outdated ]; then
-            cargo install cargo-outdated
+          if [ ! -f ~/.cargo/bin/cargo-machete ]; then
+            cargo install cargo-machete
           fi
-      - run: cargo outdated --root-deps-only --exit-code 1
-      - uses: bnjbvr/cargo-machete@main
+      - run: cargo machete
       - run: cargo fmt --all -- --check
       - run: cargo generate-lockfile --locked
       - run: cargo clippy --locked -- --deny warnings
@@ -61,3 +62,24 @@ jobs:
         with:
           context: .
           push: false
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: coverage-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            coverage-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            coverage-cache-${{ runner.os }}-
+      - run: rustup update stable && rustup default stable
+      - name: Run cargo install cargo-tarpaulin
+        run: |
+          if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
+            cargo install cargo-tarpaulin
+          fi
+      # 5%? yeah, we should do better...
+      - run: cargo tarpaulin --fail-immediately --fail-under 5 --locked

@@ -1,12 +1,33 @@
+# Cargo.toml
+
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.1.0"
+version = "0.2.2"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
 publish = false
 
 [dependencies]
+axum = { version = "0.8.1", features = ["macros"] }
+axum-extra = { version = "0.10.0", features = ["erased-json"] }
+chrono = { version = "0.4.39", features = ["serde"] }
 env_logger = "0.11.6"
-log = "0.4.22"
+fs2 = "0.4.3"
+hostname = "0.4.0"
+lettre = "0.11.12"
+log = "0.4.25"
+num-format = "0.4.4"
+num-traits = "0.2.19"
+regex = "1.11.1"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+sqlx = { version = "0.8.3", features = ["bigdecimal", "mysql", "runtime-tokio", "time"] }
+tera = "1.20.0"
+time = "0.3.37"
+tokio = { version = "1.43.0", features = ["full"] }
+toml = "0.8.20"
+
+[dev-dependencies]
+filetime = "0.2.25"

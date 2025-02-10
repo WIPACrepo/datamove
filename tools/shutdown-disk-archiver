@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# shutdown-disk-archiver
+
+# submit a command to a local DiskArchiver's RESTful status server
+# to tell the DiskArchiver to initiate a graceful shutdown
+curl -X POST http://127.0.0.1:13002/shutdown

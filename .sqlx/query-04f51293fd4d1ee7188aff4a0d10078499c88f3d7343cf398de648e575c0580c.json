@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            select sum(jfp.archive_size) as total_bytes\n            from jade_disk as jd\n            left join jade_map_disk_to_file_pair as jmdtfp\n                on jmdtfp.jade_disk_id = jd.jade_disk_id\n            left join jade_file_pair as jfp\n                on jfp.jade_file_pair_id = jmdtfp.jade_file_pair_id\n            where jd.jade_disk_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_bytes",
+        "type_info": {
+          "type": "NewDecimal",
+          "flags": "BINARY",
+          "max_size": 42
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "04f51293fd4d1ee7188aff4a0d10078499c88f3d7343cf398de648e575c0580c"
+}

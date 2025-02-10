@@ -1,6 +1,12 @@
 // lib.rs
 
+#![forbid(unsafe_code)]
+
 pub mod adhoc;
+pub mod config;
+pub mod metadata;
+pub mod sps;
+pub mod status;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
@@ -14,9 +20,18 @@ pub fn ensure_minimum_usize() {
     }
 }
 
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_always_succeed() {
+        assert!(true);
+    }
 
     #[test]
     fn it_works() {
@@ -24,6 +39,3 @@ mod tests {
         assert_eq!(result, 4);
     }
 }
-
-//----------------------------------------------------------------------------------------------------------------------
-// lib.rs

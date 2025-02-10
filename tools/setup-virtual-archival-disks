@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# setup-virtual-archival-disks
+
+CURRENT_USER=$(whoami)
+
+# create and mount 12 virtual disks at /mnt/slotX
+for i in {1..12}; do
+    # create a 1 GB disk image
+    sudo dd if=/dev/zero of=image/slot${i}.img bs=1M count=1024
+    # format the disk image ext4
+    sudo mkfs.ext4 image/slot${i}.img
+    # create the mount point (if it doesn't already exist)
+    sudo mkdir -p /mnt/slot${i}
+    # mount the disk image at the mount point
+    sudo mount -o loop image/slot${i}.img /mnt/slot${i}
+    # change ownership and permissions to the current user
+    sudo chown ${CURRENT_USER}:${CURRENT_USER} /mnt/slot${i}
+    sudo chmod u+rw /mnt/slot${i}
+done

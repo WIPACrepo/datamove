@@ -3,14 +3,4 @@
 
 export RUST_LOG=${RUST_LOG:="trace"}
 
-if ! dpkg -l | grep -q musl-tools; then
-    echo "musl-tools is not installed. Installing..."
-    sudo apt update
-    sudo apt install musl-tools --yes
-fi
-
-rustup target add x86_64-unknown-linux-musl
-
-cargo build -Zbuild-std --target=x86_64-unknown-linux-musl
-
-cargo run --all-features --bin workbench --frozen --target=x86_64-unknown-linux-musl
+cargo run --all-features --bin workbench --frozen

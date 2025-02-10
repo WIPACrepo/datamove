@@ -2,6 +2,7 @@
 
 # use Rust to compile our crate
 FROM rust:1.83.0-slim-bookworm AS build
+RUN apt-get update && apt-get install -y libssl-dev pkg-config
 WORKDIR /build
 COPY . /build
 RUN cargo build --release

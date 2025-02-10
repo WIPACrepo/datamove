@@ -1,7 +1,7 @@
 // utils.rs
 
 use fs2::{free_space, total_space};
-use log::error;
+use log::{error, info};
 use std::cmp::max;
 use std::fs;
 use std::path::Path;
@@ -152,6 +152,22 @@ pub fn is_mount_point(path: &str) -> bool {
         Ok(output) => output.status.success(),
         // if there was some kind of error, just call it false
         Err(_) => false,
+    }
+}
+
+/// TODO: write documentation comment
+pub fn move_file(file_path: &Path, dest_path: &Path) {
+    // construct the new file path in the destination directory
+    let Some(file_name) = file_path.file_name() else {
+        error!("Failed to get file name for {:?}", file_path);
+        return;
+    };
+    let target_path = dest_path.join(file_name);
+    // log about what we're doing
+    info!("Moving file {:?} to {:?}", file_path, target_path);
+    // attempt to move the file, and log if we fail
+    if let Err(e) = fs::rename(file_path, &target_path) {
+        error!("Failed to move {:?} to {:?}: {}", file_path, target_path, e);
     }
 }
 

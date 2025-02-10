@@ -43,12 +43,15 @@ pub struct SpsDiskArchiverConfig {
     pub archive_headroom: u64,
     pub cache_dir: String,
     pub contacts_json_path: String,
+    pub data_streams_json_path: String,
     pub disk_archives_json_path: String,
     pub inbox_dir: String,
+    pub outbox_dir: String,
     pub problem_files_dir: String,
     pub status_port: u16,
     pub tera_template_glob: String,
     pub work_cycle_sleep_seconds: u64,
+    pub work_dir: String,
 }
 
 //
@@ -112,14 +115,118 @@ pub fn load_contacts(path: &str) -> Result<Contacts> {
 }
 
 //
-// diskArchives.json
+// dataStreams.json
 //
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct DiskArchives {
-    #[serde(rename = "diskArchives")]
-    pub disk_archives: Vec<DiskArchive>,
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CompressionType {
+    /// .tar.bz2 Compression
+    Bzip2,
+    /// .tar.gz Compression
+    Gzip,
+    /// .flat.tar Compression
+    None,
+    /// .tar.xz Compression
+    Xz,
+    /// .tar.zst Compression
+    Zstd,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RetroDiskPolicy {
+    Archive,
+    Ignore,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Credentials {
+    pub username: String,
+    #[serde(rename = "sshKeyPath")]
+    pub ssh_key_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct StreamMetadata {
+    pub category: String,
+    pub data_center_email: String,
+    pub data_center_name: String,
+    pub entry_title: String,
+    pub parameters: String,
+    pub dif_sensor_name: String,
+    pub sensor_name: String,
+    pub subcategory: String,
+    pub technical_contact_email: String,
+    pub technical_contact_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DataStream {
+    pub id: u64,
+    pub uuid: String,
+    pub active: bool,
+    #[serde(rename = "xferLimitKbitsSec")]
+    pub xfer_limit_kbits_sec: Option<u64>,
+    pub compression: CompressionType,
+    #[serde(rename = "fileHost")]
+    pub file_host: String,
+    #[serde(rename = "filePath")]
+    pub file_path: String,
+    #[serde(rename = "filePrefix")]
+    pub file_prefix: String,
+    #[serde(rename = "binarySuffix")]
+    pub binary_suffix: String,
+    #[serde(rename = "semaphoreSuffix")]
+    pub semaphore_suffix: String,
+    pub credentials: Credentials,
+    #[serde(rename = "streamMetadata")]
+    pub stream_metadata: StreamMetadata,
+    pub archives: Vec<String>,
+    #[serde(rename = "retroDiskPolicy")]
+    pub retro_disk_policy: RetroDiskPolicy,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DataStreamsConfig {
+    #[serde(rename = "dataStreams")]
+    pub data_streams: Vec<DataStream>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DataStreams(pub Vec<DataStream>);
+
+impl DataStreams {
+    pub fn for_uuid(&self, uuid: &str) -> Option<DataStream> {
+        self.0
+            .iter()
+            .find(|&data_stream| data_stream.uuid == uuid)
+            .cloned()
+    }
+}
+
+impl<'a> IntoIterator for &'a DataStreams {
+    type Item = &'a DataStream;
+    type IntoIter = std::slice::Iter<'a, DataStream>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+pub fn load_data_streams(path: &str) -> Result<DataStreamsConfig> {
+    // open the disk archives JSON configuration file
+    let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+    // deserialize the JSON into the DataStreams structure
+    let data_streams: DataStreamsConfig =
+        serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
+    // return the DataStreams structure to the caller
+    Ok(data_streams)
+}
+
+//
+// diskArchives.json
+//
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiskArchive {
@@ -145,27 +252,38 @@ pub struct DiskArchive {
     pub short_name: String,
 }
 
-pub fn disk_archive_for_uuid<'config>(
-    disk_archives: &'config DiskArchives,
-    uuid: &str,
-) -> Option<&'config DiskArchive> {
-    // for disk_archive in &disk_archives.disk_archives {
-    //     if disk_archive.uuid == uuid {
-    //         return Some(disk_archive);
-    //     }
-    // }
-    // None
-    disk_archives
-        .disk_archives
-        .iter()
-        .find(|&disk_archive| disk_archive.uuid == uuid)
+#[derive(Clone, Debug, Deserialize)]
+pub struct DiskArchivesConfig {
+    #[serde(rename = "diskArchives")]
+    pub disk_archives: Vec<DiskArchive>,
 }
 
-pub fn load_disk_archives(path: &str) -> Result<DiskArchives> {
+#[derive(Clone, Debug)]
+pub struct DiskArchives(pub Vec<DiskArchive>);
+
+impl DiskArchives {
+    pub fn for_uuid(&self, uuid: &str) -> Option<DiskArchive> {
+        self.0
+            .iter()
+            .find(|&disk_archive| disk_archive.uuid == uuid)
+            .cloned()
+    }
+}
+
+impl<'a> IntoIterator for &'a DiskArchives {
+    type Item = &'a DiskArchive;
+    type IntoIter = std::slice::Iter<'a, DiskArchive>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+pub fn load_disk_archives(path: &str) -> Result<DiskArchivesConfig> {
     // open the disk archives JSON configuration file
     let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
     // deserialize the JSON into the DiskArchives structure
-    let disk_archives: DiskArchives =
+    let disk_archives: DiskArchivesConfig =
         serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
     // return the DiskArchives structure to the caller
     Ok(disk_archives)

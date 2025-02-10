@@ -56,3 +56,7 @@ tera_template_glob = "/mnt/data/jade/etc/**/*.tera"
 # begins to perform work again.
 #     Unit: seconds
 work_cycle_sleep_seconds = 5
+
+# The work path where the DiskArchiver will move archive files that it
+# is currently processing.
+work_dir = "/mnt/data/jade/disk_work"

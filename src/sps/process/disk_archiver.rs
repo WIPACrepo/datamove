@@ -10,16 +10,21 @@ use std::sync::{Arc, Mutex};
 use tera::Tera;
 use tokio::time::{sleep, Duration};
 
-use crate::config::{load_contacts, load_disk_archives, Contacts, DiskArchives};
+use crate::adhoc::utils::next_file;
+use crate::config::{
+    load_contacts, load_data_streams, load_disk_archives, Contacts, DataStream, DataStreams,
+    DiskArchive, DiskArchives,
+};
 use crate::metadata::ArchivalDiskMetadata;
 use crate::sps::email::{comma_separated_filter, compile_templates, send_email_disk_full};
 use crate::sps::jade_db::service::disk::close as close_disk;
 use crate::sps::jade_db::service::disk::find_by_uuid as find_disk_by_uuid;
 use crate::sps::jade_db::service::disk::get_removable_files;
 use crate::sps::jade_db::service::disk::JadeDisk;
+use crate::sps::jade_db::service::file_pair::{find_by_uuid, JadeFilePair};
 use crate::sps::jade_db::service::host::ensure_host;
 use crate::sps::jade_db::service::host::JadeHost;
-use crate::sps::utils::{get_file_count, get_oldest_file_age_in_secs, is_mount_point};
+use crate::sps::utils::{get_file_count, get_oldest_file_age_in_secs, is_mount_point, move_file};
 use crate::status::sps::{Disk, DiskArchiverStatus, DiskStatus};
 use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
 
@@ -34,6 +39,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub struct DiskArchiver {
     pub contacts: Contacts,
     pub context: Context,
+    pub data_streams: DataStreams,
     pub disk_archives: DiskArchives,
     pub host: JadeHost,
     pub shutdown: SharedFlag,
@@ -50,9 +56,15 @@ impl DiskArchiver {
         let contacts = load_contacts(contacts_json_path)
             .expect("Unable to load contacts from JSON configuration");
 
+        let data_streams_json_path = &context.config.sps_disk_archiver.data_streams_json_path;
+        let data_streams = load_data_streams(data_streams_json_path)
+            .expect("Unable to load data_streams from JSON configuration")
+            .data_streams;
+
         let disk_archives_json_path = &context.config.sps_disk_archiver.disk_archives_json_path;
         let disk_archives = load_disk_archives(disk_archives_json_path)
-            .expect("Unable to load disk_archives from JSON configuration");
+            .expect("Unable to load disk_archives from JSON configuration")
+            .disk_archives;
 
         let tera_template_glob = &context.config.sps_disk_archiver.tera_template_glob;
         let mut tera =
@@ -62,7 +74,8 @@ impl DiskArchiver {
         Self {
             contacts,
             context,
-            disk_archives,
+            data_streams: DataStreams(data_streams),
+            disk_archives: DiskArchives(disk_archives),
             host,
             shutdown: Arc::new(Mutex::new(false)),
             tera,
@@ -122,6 +135,145 @@ impl DiskArchiver {
         // raise the flag to indicate that we want to shut down
         *flag = true;
     }
+}
+
+/// archive a file pair to all the archives that need N copies of it
+async fn archive_file_pair_to_archives(
+    disk_archiver: &DiskArchiver,
+    file_pair_path: &Path,
+    jade_file_pair: &JadeFilePair,
+    data_stream: &DataStream,
+    archive_names: &[String],
+) -> Result<()> {
+    // for each disk archive
+    for disk_archive in &disk_archiver.disk_archives {
+        // if this archive appears in the list of destination archives
+        if archive_names.contains(&disk_archive.short_name) {
+            // for each copy we want to make
+            for copy_id in 1..=disk_archive.num_copies {
+                // send it to Copy:{copy_id} of Archive:{disk_archive}
+                archive_file_pair_to_disk(
+                    disk_archiver,
+                    file_pair_path,
+                    jade_file_pair,
+                    data_stream,
+                    disk_archive,
+                    copy_id,
+                )
+                .await?;
+            }
+        }
+    }
+    // tell the caller that the file pair was successfully archived to all disks
+    Ok(())
+}
+
+/// archive a file pair to a specific copy of a specific archive
+/// (i.e.: IceCube Copy 1)
+async fn archive_file_pair_to_disk(
+    _disk_archiver: &DiskArchiver,
+    _file_pair_path: &Path,
+    _jade_file_pair: &JadeFilePair,
+    _data_stream: &DataStream,
+    _disk_archive: &DiskArchive,
+    _copy_id: u64,
+) -> Result<()> {
+    // archiveFilePairToDiskCopy(filePair, host, diskArchive, copyId)
+    //     findOrCreateArchivalCopy(host, diskArchive, copyId)
+    //         findArchivalCopy(host, diskArchive, copyId)
+    //         if(no-archival-copy) {
+    //             createArchivalCopy(host, diskArchive, copyId)
+    //             findArchivalCopy(host, diskArchive, copyId)
+    //         }
+    //     addFilePairToCopyPath(filePair, destDisk)
+    //         addFilePairToDisk(diskLabel, filePair)
+    todo!();
+
+    // tell the caller that the file pair was archived successfully
+    // Ok(())
+}
+
+/// archive everything in the inbox to the disk archives they are destined for
+async fn archive_file_pairs_to_archives(disk_archiver: &DiskArchiver) -> Result<()> {
+    // determine where we're going to be working with files
+    let inbox_path = Path::new(&disk_archiver.context.config.sps_disk_archiver.inbox_dir);
+    let outbox_path = Path::new(&disk_archiver.context.config.sps_disk_archiver.outbox_dir);
+    let quarantine_path = Path::new(
+        &disk_archiver
+            .context
+            .config
+            .sps_disk_archiver
+            .problem_files_dir,
+    );
+    let work_path = Path::new(&disk_archiver.context.config.sps_disk_archiver.work_dir);
+    // while there are still files to work with
+    while let Some(file_pair_path) = next_file(inbox_path, work_path)? {
+        // extract the uuid from the file name
+        let Some(jade_file_pair_uuid) = parse_uuid_from_filename(&file_pair_path) else {
+            // if there was no UUID, quarantine the file and move on to the next one
+            error!("Unable to determine UUID for: {}", file_pair_path.display());
+            move_file(&file_pair_path, quarantine_path);
+            continue;
+        };
+
+        // load the data about the file from the database
+        let pool = &disk_archiver.context.db_pool;
+        let jade_file_pair = find_by_uuid(pool, &jade_file_pair_uuid).await?;
+
+        // extract the data stream uuid
+        let Some(jade_data_stream_uuid) = &jade_file_pair.jade_data_stream_uuid else {
+            // if there was no UUID, quarantine the file and move on to the next one
+            error!(
+                "Unable to determine Data Stream for: {}:{:#?}",
+                jade_file_pair.jade_file_pair_id, file_pair_path,
+            );
+            move_file(&file_pair_path, quarantine_path);
+            continue;
+        };
+
+        let Some(data_stream) = disk_archiver.data_streams.for_uuid(jade_data_stream_uuid) else {
+            // if there is no DataStream that matches the UUID, quarantine the file and move on to the next one
+            error!(
+                "Attempted to find DataStream for FilePair: {}:{:#?}",
+                jade_file_pair.jade_file_pair_id, file_pair_path,
+            );
+            error!(
+                "No data stream exists for DataStream UUID: {}",
+                jade_data_stream_uuid,
+            );
+            move_file(&file_pair_path, quarantine_path);
+            continue;
+        };
+
+        // determine which archives will receieve a file from this data stream
+        let archive_names = &data_stream.archives;
+        if let Err(error) = archive_file_pair_to_archives(
+            disk_archiver,
+            &file_pair_path,
+            &jade_file_pair,
+            &data_stream,
+            archive_names,
+        )
+        .await
+        {
+            // if there was an error attemping to archive this file
+            error!(
+                "Error while archiving FilePair: {}:{:#?}",
+                jade_file_pair.jade_file_pair_id, file_pair_path,
+            );
+            error!("Error was: {error}");
+            move_file(&file_pair_path, quarantine_path);
+            continue;
+        }
+
+        // all finished with the file, so let's move it to the outbox
+        info!("Archived: {:#?}", &file_pair_path);
+        move_file(&file_pair_path, outbox_path);
+    }
+
+    // let the caller know we succeeded at archiving files to disk
+    info!("Finished archiving file pairs to archival disks");
+    Ok(())
 }
 
 async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &str) -> Disk {
@@ -384,24 +536,24 @@ pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) -> Result<()> {
 pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
     // start the work cycle
     info!("Starting DiskArchiver work cycle.");
-
     // check if the operator has requested manual close for any archival disks
     if let Err(e) = close_on_semaphore(disk_archiver).await {
         error!("Error occured closing archival disks with close semaphores: {e}");
         error!("No further work will be performed until the error is handled.");
         return Err(e);
     }
-
-    // TODO: the core work cycle of the DiskArchiver
-    warn!("Doing some important DiskArchiver work here.");
-
+    // archive files to archival disks
+    if let Err(e) = archive_file_pairs_to_archives(disk_archiver).await {
+        error!("Error occured archiving files to archival disks: {e}");
+        error!("No further work will be performed until the error is handled.");
+        return Err(e);
+    }
     // clean the cache of any files included on N archival disks
     if let Err(e) = clean_disk_cache(disk_archiver).await {
         error!("Error occured cleaning the disk archival cache: {e}");
         error!("No further work will be performed until the error is handled.");
         return Err(e);
     }
-
     // finish the work cycle successfully
     info!("End of DiskArchiver work cycle.");
     Ok(())
@@ -438,7 +590,7 @@ fn extract_uuids_from_cache(cache_dir: &Path) -> Result<HashSet<String>> {
 fn get_disk_paths(disk_archiver: &DiskArchiver) -> Vec<String> {
     // put all the configured paths into a set
     let mut disk_path_set: BTreeSet<String> = BTreeSet::new();
-    for disk_archive in &disk_archiver.disk_archives.disk_archives {
+    for disk_archive in &disk_archiver.disk_archives {
         for path in &disk_archive.paths {
             disk_path_set.insert(path.to_string());
         }
@@ -461,23 +613,37 @@ async fn get_loaded_disk_ids(disk_archiver: &DiskArchiver) -> Vec<i64> {
     loaded_disk_ids
 }
 
+/// TODO: this function exists to detect when configuration contradicts the
+///       cheating we did with assuming there is only one (IceCube) archive
+///       if you get an error here, it means the assumption of the single
+///       archive built into the cache purge logic is wrong
 fn get_required_copies(disk_archiver: &DiskArchiver) -> Result<u64> {
-    // get the collection of disk archives
-    let archives = &disk_archiver.disk_archives.disk_archives;
-    // handle the case where there are no disk archives
-    let first_value = archives
-        .first()
-        .ok_or("No disk archives provided!")?
-        .num_copies;
-    // check that all disk archives have the same num_copies value
-    if archives
-        .iter()
-        .all(|archive| archive.num_copies == first_value)
-    {
-        Ok(first_value)
-    } else {
-        Err("Inconsistent num_copies among disk archives!".into())
+    let required_copies = 2;
+    for disk_archive in &disk_archiver.disk_archives {
+        if disk_archive.num_copies != required_copies {
+            return Err("Inconsistent num_copies among disk archives!".into());
+        }
     }
+    Ok(required_copies)
+}
+
+fn parse_uuid_from_filename(path: &Path) -> Option<String> {
+    // create a RegEx to match JADE's filename pattern `ukey_$UUID_`
+    let uuid_regex = Regex::new(r"ukey_([a-f0-9-]{36})_").unwrap();
+    // get the file name
+    let os_str = path.as_os_str();
+    let os_string = os_str.to_os_string();
+    let file_name = os_string.to_string_lossy();
+    // look for the UUID in the file name
+    if let Some(caps) = uuid_regex.captures(&file_name) {
+        if let Some(uuid_match) = caps.get(1) {
+            // yay! we found it, let's return it
+            let uuid_str = uuid_match.as_str();
+            return Some(uuid_str.to_string());
+        }
+    }
+    // And so the poor dog had
+    None
 }
 
 fn read_disk_labels(path: &Path) -> Result<Vec<String>> {

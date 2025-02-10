@@ -9,7 +9,7 @@ use std::path::Path;
 use tera::Result as TeraResult;
 use tera::{from_value, to_value, Context, Tera, Value};
 
-use crate::config::{disk_archive_for_uuid, Contact, ContactRole, EmailConfig};
+use crate::config::{Contact, ContactRole, EmailConfig};
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::service::disk::{get_num_file_pairs, get_size_file_pairs};
 use crate::sps::process::disk_archiver::build_archival_disks_status;
@@ -100,7 +100,8 @@ fn build_capacity_update(
                     .archive
                     .clone()
                     .expect("Disk missing disk_archive_uuid");
-                let disk_archive = disk_archive_for_uuid(disk_archives, &disk_archive_uuid)
+                let disk_archive = disk_archives
+                    .for_uuid(&disk_archive_uuid)
                     .expect("Disk has unknown disk archive");
                 // add the information to the In-Use paths
                 let info = format!("{} ID:{} [{}]", path, disk.id, &disk_archive.description);
@@ -141,10 +142,8 @@ async fn build_disk_closed_body(
     context.insert("hostname", hostname);
 
     let disk_archive_uuid = &disk.disk_archive_uuid;
-    if let Some(disk_archive) =
-        disk_archive_for_uuid(&disk_archiver.disk_archives, disk_archive_uuid)
-    {
-        context.insert("disk_archive", disk_archive);
+    if let Some(disk_archive) = disk_archiver.disk_archives.for_uuid(disk_archive_uuid) {
+        context.insert("disk_archive", &disk_archive);
     } else {
         return TERA_RENDER_ERROR.to_string();
     }

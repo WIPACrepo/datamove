@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            UPDATE jade_disk\n            SET bad = ?,\n                capacity = ?,\n                closed = ?,\n                copy_id = ?,\n                date_created = ?,\n                date_updated = ?,\n                device_path = ?,\n                label = ?,\n                on_hold = ?,\n                uuid = ?,\n                version = ?,\n                jade_host_id = ?,\n                disk_archive_uuid = ?,\n                serial_number = ?,\n                hardware_metadata = ?\n            WHERE jade_disk_id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 16
+    },
+    "nullable": []
+  },
+  "hash": "4c115cb1a58503f8ddda0c5e583926f6666df4cb6d35b69247cb7374d257dc41"
+}

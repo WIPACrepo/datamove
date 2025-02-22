@@ -1,6 +1,8 @@
 // disk_archiver.rs
 
-use log::{error, info, warn};
+use chrono::{NaiveDateTime, Utc};
+use log::{error, info, trace, warn};
+use rand::seq::SliceRandom;
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
@@ -9,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tera::Tera;
 use tokio::time::{sleep, Duration};
+use uuid::Uuid;
 
 use crate::adhoc::utils::next_file;
 use crate::config::{
@@ -16,15 +19,25 @@ use crate::config::{
     DiskArchive, DiskArchives,
 };
 use crate::metadata::ArchivalDiskMetadata;
-use crate::sps::email::{comma_separated_filter, compile_templates, send_email_disk_full};
+use crate::sps::email::{
+    comma_separated_filter, compile_templates, send_email_disk_full, send_email_disk_started,
+};
 use crate::sps::jade_db::service::disk::close as close_disk;
+use crate::sps::jade_db::service::disk::create as create_disk;
 use crate::sps::jade_db::service::disk::find_by_uuid as find_disk_by_uuid;
+use crate::sps::jade_db::service::disk::find_open as find_open_disk;
 use crate::sps::jade_db::service::disk::get_removable_files;
+use crate::sps::jade_db::service::disk::get_serial_number_age_in_secs;
 use crate::sps::jade_db::service::disk::JadeDisk;
+use crate::sps::jade_db::service::disk_label::get_next_label;
 use crate::sps::jade_db::service::file_pair::{find_by_uuid, JadeFilePair};
 use crate::sps::jade_db::service::host::ensure_host;
 use crate::sps::jade_db::service::host::JadeHost;
-use crate::sps::utils::{get_file_count, get_oldest_file_age_in_secs, is_mount_point, move_file};
+use crate::sps::utils::lsblk::get_serial_for_mountpoint;
+use crate::sps::utils::{
+    count_uuid_labels, get_file_count, get_free_space, get_oldest_file_age_in_secs, is_mount_point,
+    is_writable_dir, move_file, touch_label,
+};
 use crate::status::sps::{Disk, DiskArchiverStatus, DiskStatus};
 use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
 
@@ -171,13 +184,15 @@ async fn archive_file_pair_to_archives(
 /// archive a file pair to a specific copy of a specific archive
 /// (i.e.: IceCube Copy 1)
 async fn archive_file_pair_to_disk(
-    _disk_archiver: &DiskArchiver,
+    disk_archiver: &DiskArchiver,
     _file_pair_path: &Path,
     _jade_file_pair: &JadeFilePair,
     _data_stream: &DataStream,
-    _disk_archive: &DiskArchive,
-    _copy_id: u64,
+    disk_archive: &DiskArchive,
+    copy_id: u64,
 ) -> Result<()> {
+    let _jade_disk = find_or_create_archive_copy(disk_archiver, disk_archive, copy_id).await?;
+
     // archiveFilePairToDiskCopy(filePair, host, diskArchive, copyId)
     //     findOrCreateArchivalCopy(host, diskArchive, copyId)
     //         findArchivalCopy(host, diskArchive, copyId)
@@ -187,10 +202,11 @@ async fn archive_file_pair_to_disk(
     //         }
     //     addFilePairToCopyPath(filePair, destDisk)
     //         addFilePairToDisk(diskLabel, filePair)
-    todo!();
+    // todo!();
 
     // tell the caller that the file pair was archived successfully
     // Ok(())
+    todo!("archive_file_pair_to_disk() not finished!")
 }
 
 /// archive everything in the inbox to the disk archives they are destined for
@@ -533,6 +549,93 @@ pub async fn close_on_semaphore(disk_archiver: &DiskArchiver) -> Result<()> {
     Ok(())
 }
 
+async fn create_archive_copy(
+    disk_archiver: &DiskArchiver,
+    disk_archive: &DiskArchive,
+    copy_id: u64,
+) -> Result<()> {
+    trace!("Trying to create Copy {}", copy_id);
+    // find available disk
+    let Some(disk_path) = find_available_disk(disk_archive) else {
+        let msg = "create_archive_copy(): Unable to find available disk to create archive.";
+        error!("{msg}");
+        return Err(msg.into());
+    };
+    // get the serial number of the disk
+    let Some(serial_number) = get_serial_for_mountpoint(&disk_path) else {
+        let msg =
+            format!("create_archive_copy(): Unable to obtain serial for mountpoint '{disk_path}'.");
+        error!("{msg}");
+        return Err(msg.into());
+    };
+    // check the serial number for re-use
+    let minimum_disk_age = disk_archiver
+        .context
+        .config
+        .sps_disk_archiver
+        .minimum_disk_age_seconds;
+    let pool = &disk_archiver.context.db_pool;
+    let age = get_serial_number_age_in_secs(pool, &serial_number).await?;
+    if age < minimum_disk_age {
+        let msg = format!(
+            "Serial Number:'{}' re-used TOO SOON! Age:{}s (Required: >={}s)",
+            serial_number, age, minimum_disk_age
+        );
+        return Err(msg.into());
+    }
+    // generate a Label (i.e.: IceCube_2_2025_0008)
+    let label = get_next_label(pool, disk_archive, copy_id).await?;
+    // generate a UUID -> label the disk
+    let uuid = Uuid::new_v4().to_string();
+    let path = PathBuf::from(&disk_path);
+    let label_path = path.join(&uuid);
+    touch_label(&label_path)?;
+    // create a database entry
+    let capacity = get_free_space(&disk_path)?;
+    let disk_archive_uuid = &disk_archive.uuid;
+    let jade_host_id = disk_archiver.host.jade_host_id;
+    let now: NaiveDateTime = Utc::now().naive_utc();
+    let jade_disk_id = create_disk(
+        pool,
+        &JadeDisk {
+            jade_disk_id: -1, // doesn't matter
+            bad: false,
+            capacity: capacity as i64,
+            closed: false,
+            copy_id: copy_id as i32,
+            date_created: now,
+            date_updated: now,
+            device_path: disk_path.clone(),
+            label,
+            on_hold: false,
+            uuid: uuid.clone(),
+            version: 1,
+            jade_host_id,
+            disk_archive_uuid: disk_archive_uuid.clone(),
+            serial_number,
+            hardware_metadata: "".to_string(),
+        },
+    )
+    .await?;
+    // reload the created disk from the database
+    let disk = find_disk_by_uuid(pool, &uuid).await?;
+    // log about creating the disk
+    info!(
+        "Disk {} ({}) created as Host {} DiskArchive {}:{} Copy {} at {}",
+        jade_disk_id,
+        uuid,
+        disk_archiver.host.host_name,
+        disk_archive.id,
+        disk_archive.description,
+        copy_id,
+        &disk_path
+    );
+    // email a 'Streaming Archive Started on' email about it
+    send_email_disk_started(disk_archiver, &label_path, &disk).await?;
+    // indicate to the caller that we succeeded
+    Ok(())
+}
+
 pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
     // start the work cycle
     info!("Starting DiskArchiver work cycle.");
@@ -585,6 +688,97 @@ fn extract_uuids_from_cache(cache_dir: &Path) -> Result<HashSet<String>> {
     }
     // return the set of filename UUIDs to the caller
     Ok(uuid_set)
+}
+
+/// find an open disk for archive X, copy Y, if it exists
+async fn find_archive_copy(
+    disk_archiver: &DiskArchiver,
+    disk_archive: &DiskArchive,
+    copy_id: u64,
+) -> Result<Option<JadeDisk>> {
+    // query the database for our disk
+    let pool = &disk_archiver.context.db_pool;
+    let jade_disk = find_open_disk(pool, disk_archiver, disk_archive, copy_id).await?;
+    Ok(jade_disk)
+}
+
+/// search the paths of the archive to find an available (i.e.: empty) disk
+fn find_available_disk(disk_archive: &DiskArchive) -> Option<String> {
+    trace!("Found {} archival disk paths", disk_archive.paths.len());
+    // shuffle the paths, so we search at random
+    let mut rng = rand::rng();
+    let mut paths = disk_archive.paths.clone();
+    paths.shuffle(&mut rng);
+    // for each path, run it through a gauntlet of checks
+    for path in &paths {
+        // if the path doesn't exist, the disk isn't mounted
+        let path_exists = match fs::exists(path) {
+            Ok(path_exists) => path_exists,
+            Err(_) => {
+                trace!("Unable to determine if {} exists; skipping.", path);
+                continue;
+            }
+        };
+        if !path_exists {
+            trace!("{} is not mounted; skipping.", path);
+            continue;
+        }
+        // if we can't write there, we can't use it
+        if !is_writable_dir(path) {
+            trace!("{} cannot be written to; skipping.", path);
+            continue;
+        }
+        // if it's not a mount point, we shouldn't use it
+        if !is_mount_point(path) {
+            trace!("{} is NOT a mount point; skipping.", path);
+            continue;
+        }
+        // if we can't read the filenames in the directory
+        let uuid_count = match count_uuid_labels(path) {
+            Ok(uuid_count) => uuid_count,
+            Err(_) => {
+                trace!("{} cannot be checked for UUID labels; skipping.", path);
+                continue;
+            }
+        };
+        // if there are any labels there
+        if uuid_count > 0 {
+            trace!("{} already has a UUID label; skipping.", path);
+            continue;
+        }
+        // we survived the gauntlet; this disk is ready to be a JADE disk!
+        return Some(path.clone());
+    }
+    // ut oh, we exhausted all possible paths; this is bad
+    None
+}
+
+/// determine which disk can be used to write a file to archive X, copy Y
+async fn find_or_create_archive_copy(
+    disk_archiver: &DiskArchiver,
+    disk_archive: &DiskArchive,
+    copy_id: u64,
+) -> Result<JadeDisk> {
+    // if we're able to find an open disk for archive X, copy Y
+    if let Some(jade_disk) = find_archive_copy(disk_archiver, disk_archive, copy_id).await? {
+        // return that disk to the caller
+        return Ok(jade_disk);
+    }
+    // there was no open disk for archive X, copy Y, so let's create one
+    create_archive_copy(disk_archiver, disk_archive, copy_id).await?;
+    // try to find an open disk for archive X, copy Y
+    match find_archive_copy(disk_archiver, disk_archive, copy_id).await? {
+        // we found the one we created, so return it
+        Some(jade_disk) => Ok(jade_disk),
+        // whoops, something has gone very seriously wrong...
+        None => {
+            let msg = format!(
+                "Unable to find an open disk for Archive:{} Copy:{}",
+                disk_archive.name, copy_id,
+            );
+            Err(msg.into())
+        }
+    }
 }
 
 fn get_disk_paths(disk_archiver: &DiskArchiver) -> Vec<String> {

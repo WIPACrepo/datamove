@@ -5,6 +5,7 @@ use num_traits::cast::ToPrimitive;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, MySqlPool};
 use std::collections::HashSet;
+use time::OffsetDateTime;
 
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::utils::JadeDatePrimitive;
@@ -28,9 +29,8 @@ pub struct MySqlJadeDisk {
     pub version: Option<i64>,
     pub jade_host_id: Option<i64>,
     pub disk_archive_uuid: Option<String>,
+    pub serial_number: Option<String>,
     pub hardware_metadata: Option<String>,
-    // TODO: implement this!
-    // pub serial_number: Option<String>,
 }
 
 impl From<&JadeDisk> for MySqlJadeDisk {
@@ -59,6 +59,7 @@ impl From<&JadeDisk> for MySqlJadeDisk {
             version: Some(value.version),
             jade_host_id: Some(value.jade_host_id),
             disk_archive_uuid: Some(value.disk_archive_uuid.clone()),
+            serial_number: Some(value.serial_number.clone()),
             hardware_metadata: Some(value.hardware_metadata.clone()),
         }
     }
@@ -81,8 +82,10 @@ pub async fn create(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> 
                 version,
                 jade_host_id,
                 disk_archive_uuid,
+                serial_number,
                 hardware_metadata
             ) VALUES (
+                ?,
                 ?,
                 ?,
                 ?,
@@ -112,8 +115,8 @@ pub async fn create(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> 
         jade_disk.version,
         jade_disk.jade_host_id,
         jade_disk.disk_archive_uuid,
-        jade_disk.hardware_metadata // TODO: implement this!
-                                    // jade_disk.serial_number
+        jade_disk.serial_number,
+        jade_disk.hardware_metadata
     )
     .execute(pool)
     .await?
@@ -139,6 +142,34 @@ pub async fn find_by_uuid(pool: &MySqlPool, uuid: &str) -> Result<Option<MySqlJa
         MySqlJadeDisk,
         r#"SELECT * FROM jade_disk WHERE uuid = ?"#,
         uuid
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result)
+}
+
+/// find an open disk for archive X, copy Y
+pub async fn find_open(
+    pool: &MySqlPool,
+    jade_host_id: i64,
+    disk_archive_uuid: &str,
+    copy_id: i32,
+) -> Result<Option<MySqlJadeDisk>> {
+    let result = sqlx::query_as!(
+        MySqlJadeDisk,
+        r#"
+            SELECT *
+            FROM jade_disk
+            WHERE bad = false
+                AND closed = false
+                AND copy_id = ?
+                AND jade_host_id = ?
+                AND disk_archive_uuid = ?
+        "#,
+        copy_id,
+        jade_host_id,
+        disk_archive_uuid
     )
     .fetch_optional(pool)
     .await?;
@@ -206,6 +237,46 @@ pub async fn get_removable_files(
     Ok(jade_file_pair_uuids.into_iter().collect())
 }
 
+pub async fn get_serial_number_age_in_secs(
+    pool: &MySqlPool,
+    serial_number: &str,
+) -> Result<Option<u32>> {
+    let result = sqlx::query!(
+        r#"
+            select max(date_created) as latest_use
+            from jade_disk as jd
+            where jd.serial_number = ?
+        "#,
+        serial_number
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // did we get anything back from the database?
+    match result.latest_use {
+        // No? Okay, return None
+        None => Ok(None),
+        // Yes? Okay, convert the result to age in seconds
+        Some(latest_use) => {
+            // determine how long ago it was in seconds
+            let now = OffsetDateTime::now_utc();
+            let past_offset = latest_use.assume_utc();
+            let duration = now - past_offset;
+            let seconds = duration.whole_seconds();
+            // if somebody went 88 miles an hour...
+            if seconds < 0 {
+                let msg = format!(
+                    "Serial Number:'{}' was used in the future!? (Age:{}s)",
+                    serial_number, seconds
+                );
+                return Err(msg.into());
+            }
+            // otherwise, turn it into a u32
+            Ok(Some(seconds as u32))
+        }
+    }
+}
+
 pub async fn get_size_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<i64> {
     let result = sqlx::query!(
         r#"
@@ -250,6 +321,7 @@ pub async fn save(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {
                 version = ?,
                 jade_host_id = ?,
                 disk_archive_uuid = ?,
+                serial_number = ?,
                 hardware_metadata = ?
             WHERE jade_disk_id = ?
         "#,
@@ -266,9 +338,9 @@ pub async fn save(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {
         jade_disk.version,
         jade_disk.jade_host_id,
         jade_disk.disk_archive_uuid,
+        jade_disk.serial_number,
         jade_disk.hardware_metadata,
-        jade_disk.jade_disk_id // TODO: implement this!
-                               // jade_disk.serial_number
+        jade_disk.jade_disk_id
     )
     .execute(pool)
     .await?

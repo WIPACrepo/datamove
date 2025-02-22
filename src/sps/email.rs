@@ -24,6 +24,7 @@ pub type Error = Box<dyn core::error::Error>;
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub const CLOSE_DISK_TEMPLATE: &str = "closeArchiveDisk.tera";
+pub const CREATE_DISK_TEMPLATE: &str = "createArchiveDisk.tera";
 pub const DISK_FULL_SUBJECT: &str = "Archive Disk Full Notification";
 pub const TERA_RENDER_ERROR: &str = "Something went wrong with Tera.";
 
@@ -208,6 +209,39 @@ async fn build_disk_closed_body(
     render_email_body(tera, CLOSE_DISK_TEMPLATE, &context)
 }
 
+async fn build_disk_started_body(
+    disk_archiver: &DiskArchiver,
+    _label_path: &Path,
+    disk: &JadeDisk,
+) -> String {
+    let tera = &disk_archiver.tera;
+    let mut context: Context = Context::default();
+
+    let hostname = &disk_archiver.host.host_name;
+    context.insert("hostname", hostname);
+
+    let disk_archive_uuid = &disk.disk_archive_uuid;
+    if let Some(disk_archive) = disk_archiver.disk_archives.for_uuid(disk_archive_uuid) {
+        context.insert("disk_archive", &disk_archive);
+    } else {
+        return TERA_RENDER_ERROR.to_string();
+    }
+
+    let email_disk: EmailDisk = disk.into();
+    context.insert("disk", &email_disk);
+
+    let device_path = &disk.device_path;
+    let free_bytes = match get_free_space(device_path) {
+        Ok(free_bytes) => free_bytes,
+        Err(_) => {
+            return TERA_RENDER_ERROR.to_string();
+        }
+    };
+    context.insert("free_bytes", &free_bytes);
+
+    render_email_body(tera, CREATE_DISK_TEMPLATE, &context)
+}
+
 fn calculate_rate_bytes_sec(disk: &JadeDisk, size: i64) -> Result<i64> {
     // determine the duration over which the files were written
     let start = disk.date_created;
@@ -333,6 +367,72 @@ pub async fn send_email_disk_full(
     Ok(())
 }
 
+pub async fn send_email_disk_started(
+    disk_archiver: &DiskArchiver,
+    label_path: &Path,
+    disk: &JadeDisk,
+) -> Result<()> {
+    // destructure our EmailConfig into useful variables
+    let EmailConfig {
+        enabled,
+        from,
+        host,
+        password,
+        port,
+        reply_to,
+        username,
+    } = &disk_archiver.context.config.email_configuration;
+    // if email is disabled, don't send any email
+    if !enabled {
+        warn!("In our current configuration, e-mail is disabled. No Streaming Archive Started e-mail will be sent.");
+        warn!("send_email_disk_started(): email_config.enabled = {enabled}");
+        return Ok(());
+    }
+    // engage our Auto Memories Doll to write a letter for us
+    let mut email = Message::builder()
+        .from(from.parse()?)
+        .reply_to(reply_to.parse()?);
+    // obtain the list of human contacts to be informed
+    let contacts = &disk_archiver.contacts.contacts;
+    let contacts = contacts
+        .iter()
+        // keep the ones with the JADE_ADMIN and WINTER_OVER role
+        .filter(|x| (x.role == ContactRole::JadeAdmin) || (x.role == ContactRole::WinterOver));
+    // for each contact on the list
+    for email_to in contacts {
+        // log about the recipient
+        let Contact {
+            name,
+            email: address,
+            role: _role,
+        } = email_to;
+        info!("Sending a Streaming Archive Started e-mail to: {name} <{address}>");
+        // add the recipient to the e-mail
+        email = email.to(email_to.into());
+    }
+    // set the subject of the e-mail
+    let host_name = &disk_archiver.host.host_name;
+    let device_path = &disk.device_path;
+    let subject = format!("Streaming Archive Started on {}:{}", host_name, device_path);
+    email = email.subject(subject);
+    // build and set the body to create the e-mail message
+    let email_body = build_disk_started_body(disk_archiver, label_path, disk).await;
+    let message = email.body(email_body)?;
+    // create an SmtpTransport to use for sending the message
+    let creds = Credentials::new(username.to_owned(), password.to_owned());
+    let mailer = SmtpTransport::relay(host)
+        .unwrap()
+        .credentials(creds)
+        .port(*port)
+        .build();
+    // You've Got Mail!
+    info!("Sending Streaming Archive Started message.");
+    mailer.send(&message)?;
+
+    // indicate to the caller that we succeeded
+    Ok(())
+}
+
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -430,21 +530,21 @@ mod tests {
         // Finished:     Dec 16, 2024 4:54:59 PM
         // Rate:         14,025,813 bytes/sec
 
-        context.insert("rate_bytes_sec", &14025813i64);
+        context.insert("rate_bytes_sec", &14_025_813i64);
 
         // Host:         jade01
         // Device:       /mnt/slot4
         // Free:         7,245,053,952 bytes
         // Total:        5,952,694,763,520 bytes
 
-        context.insert("free_bytes", &7245053952u64);
-        context.insert("total_bytes", &5952694763520u64);
+        context.insert("free_bytes", &7_245_053_952u64);
+        context.insert("total_bytes", &5_952_694_763_520u64);
 
         // File Count:   32,351
         // Data Size:    5,945,177,808,502 bytes
 
-        context.insert("num_file_pairs", &32351i64);
-        context.insert("size_file_pairs", &5945177808502i64);
+        context.insert("num_file_pairs", &32_351i64);
+        context.insert("size_file_pairs", &5_945_177_808_502i64);
 
         // Please unmount, remove, and safely store this disk.
 
@@ -500,9 +600,67 @@ mod tests {
             ],
         );
 
-        let result = tera.render("closeArchiveDisk.tera", &context)?;
+        let result = tera.render(CLOSE_DISK_TEMPLATE, &context)?;
 
         let expected = include_str!("../../tests/data/test_tera_template_close_archive.txt");
+
+        assert_eq!(expected, result);
+        Ok(())
+    }
+
+    #[test]
+    fn test_tera_template_create_archive() -> Result<()> {
+        let mut tera = Tera::new("tests/data/**/*.tera")?;
+        tera.register_filter("comma", comma_separated_filter);
+
+        let mut context: Context = Context::default();
+
+        context.insert("hostname", "jade01");
+
+        context.insert(
+            "disk_archive",
+            &DiskArchive {
+                id: 1,
+                uuid: "e09e65f7-37d1-45a7-9553-723a582504ef".to_string(),
+                description: "IceCube Disk Archive".to_string(),
+                name: "Disk-IceCube".to_string(),
+                num_copies: 2,
+                paths: vec![
+                    "/mnt/slot1".to_string(),
+                    "/mnt/slot2".to_string(),
+                    "/mnt/slot3".to_string(),
+                    "/mnt/slot4".to_string(),
+                    "/mnt/slot5".to_string(),
+                    "/mnt/slot6".to_string(),
+                    "/mnt/slot7".to_string(),
+                    "/mnt/slot8".to_string(),
+                    "/mnt/slot9".to_string(),
+                    "/mnt/slot10".to_string(),
+                    "/mnt/slot11".to_string(),
+                    "/mnt/slot12".to_string(),
+                ],
+                short_name: "IceCube".to_string(),
+            },
+        );
+
+        context.insert(
+            "disk",
+            &EmailDisk {
+                id: 1912,
+                label: "IceCube_2_2025_0009".to_string(),
+                copy_id: 2,
+                uuid: "f69db55c-365c-40f9-9695-c13fa37343cf".to_string(),
+                date_created: "Feb 16, 2025 7:11:17 AM".to_string(),
+                date_updated: "Feb 16, 2025 7:11:17 AM".to_string(),
+                path: "/mnt/slot10".to_string(),
+            },
+        );
+
+        context.insert("free_bytes", &5_952_677_957_632u64);
+
+        let result = tera.render(CREATE_DISK_TEMPLATE, &context)?;
+
+        let expected = include_str!("../../tests/data/test_tera_template_create_archive.txt");
 
         assert_eq!(expected, result);
         Ok(())

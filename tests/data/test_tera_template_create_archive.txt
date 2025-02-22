@@ -1,0 +1,18 @@
+jade began streaming to a new archival disk.
+
+Host:         jade01
+Archive:      IceCube Disk Archive
+Copy:         2
+
+The mounted disk being used by the archive.
+
+Host:         jade01
+Device:       /mnt/slot10
+Free:         5,952,677,957,632 bytes
+
+The destination disk has the following information.
+
+ID:           1912
+Label:        IceCube_2_2025_0009
+UUID:         f69db55c-365c-40f9-9695-c13fa37343cf
+Started:      Feb 16, 2025 7:11:17 AM

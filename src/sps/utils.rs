@@ -1,15 +1,42 @@
 // utils.rs
 
+pub mod lsblk;
+
 use fs2::{free_space, total_space};
 use log::{error, info};
 use std::cmp::max;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
+use uuid::Uuid;
 
 pub type Error = Box<dyn core::error::Error>;
 pub type Result<T> = core::result::Result<T, Error>;
+
+/// TODO: write documentation comment
+pub fn count_uuid_labels(path_str: &str) -> Result<u64> {
+    // if not a directory, then an error
+    let path = Path::new(path_str);
+    if !path.is_dir() {
+        let msg = format!("{path_str} is not a directory");
+        return Err(msg.into());
+    }
+    // let's count the UUIDs...
+    let mut count = 0;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        if let Some(filename) = entry.file_name().to_str() {
+            // if the entire filename is a valid UUID, it counts
+            if Uuid::parse_str(filename).is_ok() {
+                count += 1;
+            }
+        }
+    }
+    // return the count to the caller
+    Ok(count)
+}
 
 /// Determine the count of files in the provided directory.
 ///
@@ -156,6 +183,28 @@ pub fn is_mount_point(path: &str) -> bool {
 }
 
 /// TODO: write documentation comment
+pub fn is_writable_dir(path_str: &str) -> bool {
+    // not a directory? then not a writable directory
+    let path = Path::new(path_str);
+    if !path.is_dir() {
+        return false;
+    }
+    // create a canary file and write something to it
+    let test_file = path.join(format!(".writability_test_{}", Uuid::new_v4()));
+    let result = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&test_file)
+        .and_then(|mut file| file.write_all(b"test"));
+    // were we able to write something to it after all?
+    let writable = result.is_ok();
+    // clean up the canary file (if it was created)
+    let _ = fs::remove_file(test_file);
+    // tell the caller what we discovered
+    writable
+}
+
+/// TODO: write documentation comment
 pub fn move_file(file_path: &Path, dest_path: &Path) {
     // construct the new file path in the destination directory
     let Some(file_name) = file_path.file_name() else {
@@ -169,6 +218,17 @@ pub fn move_file(file_path: &Path, dest_path: &Path) {
     if let Err(e) = fs::rename(file_path, &target_path) {
         error!("Failed to move {:?} to {:?}: {}", file_path, target_path, e);
     }
+}
+
+/// TODO: write documentation comment
+pub fn touch_label(label_path: &Path) -> Result<()> {
+    // create a new zero byte file to act as a disk label
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(label_path)?;
+    // tell the caller that we succeeded at creating the disk label
+    Ok(())
 }
 
 //---------------------------------------------------------------------------

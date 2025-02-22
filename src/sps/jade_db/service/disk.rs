@@ -5,16 +5,24 @@ use log::{error, info, trace};
 use sqlx::MySqlPool;
 use std::collections::HashSet;
 
+use crate::config::DiskArchive;
+use crate::sps::jade_db::repo::disk::create as repo_create;
 use crate::sps::jade_db::repo::disk::find_by_uuid as repo_find_by_uuid;
+use crate::sps::jade_db::repo::disk::find_open as repo_find_open;
 use crate::sps::jade_db::repo::disk::get_num_file_pairs as repo_get_num_file_pairs;
 use crate::sps::jade_db::repo::disk::get_removable_files as repo_get_removable_files;
+use crate::sps::jade_db::repo::disk::get_serial_number_age_in_secs as repo_get_serial_number_age_in_secs;
 use crate::sps::jade_db::repo::disk::get_size_file_pairs as repo_get_size_file_pairs;
 use crate::sps::jade_db::repo::disk::save as repo_save;
 use crate::sps::jade_db::repo::disk::MySqlJadeDisk;
 use crate::sps::jade_db::utils::convert_primitive_date_time_to_naive_date_time as to_naive_date_time;
+use crate::sps::process::disk_archiver::DiskArchiver;
 
 pub type Error = Box<dyn core::error::Error>;
 pub type Result<T> = core::result::Result<T, Error>;
+
+pub const ONE_YEAR_IN_SECONDS: u32 = 31_536_000;
+pub const TEN_YEARS_IN_SECONDS: u32 = 315_360_000;
 
 #[derive(Clone)]
 pub struct JadeDisk {
@@ -32,8 +40,8 @@ pub struct JadeDisk {
     pub version: i64,
     pub jade_host_id: i64,
     pub disk_archive_uuid: String,
-    pub hardware_metadata: String,
     pub serial_number: String,
+    pub hardware_metadata: String,
 }
 
 impl From<MySqlJadeDisk> for JadeDisk {
@@ -59,10 +67,12 @@ impl From<MySqlJadeDisk> for JadeDisk {
             disk_archive_uuid: value
                 .disk_archive_uuid
                 .expect("jade_disk.disk_archive_uuid IS null"),
+            serial_number: value
+                .serial_number
+                .expect("jade_disk.serial_number IS null"),
             hardware_metadata: value
                 .hardware_metadata
                 .expect("jade_disk.hardware_metadata IS null"),
-            serial_number: "".into(), // TODO: implement this!
         }
     }
 }
@@ -98,6 +108,11 @@ pub async fn close_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<u64> {
     close(pool, &jade_disk).await
 }
 
+pub async fn create(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<u64> {
+    let mysql_jade_disk: MySqlJadeDisk = jade_disk.into();
+    repo_create(pool, &mysql_jade_disk).await
+}
+
 pub async fn find_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<JadeDisk> {
     // try to locate the disk by uuid in the database
     match repo_find_by_uuid(pool, find_uuid).await {
@@ -124,6 +139,49 @@ pub async fn find_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<JadeDisk>
     }
 }
 
+/// find an open disk for archive X, copy Y
+pub async fn find_open(
+    pool: &MySqlPool,
+    disk_archiver: &DiskArchiver,
+    disk_archive: &DiskArchive,
+    copy_id: u64,
+) -> Result<Option<JadeDisk>> {
+    // get the information we need for the query
+    let jade_host_id = disk_archiver.host.jade_host_id;
+    let disk_archive_uuid = &disk_archive.uuid;
+    let copy_id = copy_id as i32;
+    // try to locate the disk in the database
+    match repo_find_open(pool, jade_host_id, disk_archive_uuid, copy_id).await {
+        // if we got a result back from the database
+        Ok(disk) => {
+            if let Some(disk) = disk {
+                // convert it to a service layer JadeDisk and return it to the caller
+                let jade_disk: JadeDisk = disk.into();
+                Ok(Some(jade_disk))
+            } else {
+                // otherwise log the not found and return an Ok(None) result
+                let msg = format!(
+                    "Database table jade_disk has no open disk for Host:{} Archive:{} Copy:{}",
+                    &disk_archiver.host.host_name, &disk_archive.name, copy_id,
+                );
+                info!("{msg}");
+                Ok(None)
+            }
+        }
+        // whoops, something went wrong in the database layer, better log about that
+        Err(e) => {
+            let msg = format!(
+                "Unable to read database table jade_disk for Host:{} Archive:{} Copy:{}\nError was: {e}",
+                &disk_archiver.host.host_name,
+                &disk_archive.name,
+                copy_id,
+            );
+            error!("{msg}");
+            Err(msg.into())
+        }
+    }
+}
+
 pub async fn get_num_file_pairs(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<i64> {
     repo_get_num_file_pairs(pool, jade_disk.jade_disk_id).await
 }
@@ -134,6 +192,16 @@ pub async fn get_removable_files(
     required_copies: u64,
 ) -> Result<HashSet<String>> {
     repo_get_removable_files(pool, loaded_disk_ids, required_copies).await
+}
+
+pub async fn get_serial_number_age_in_secs(pool: &MySqlPool, serial_number: &str) -> Result<u32> {
+    let serial_number_age = repo_get_serial_number_age_in_secs(pool, serial_number).await?;
+    if let Some(secs) = serial_number_age {
+        info!("Serial number '{serial_number}' is {secs} seconds old.");
+        return Ok(secs);
+    }
+    info!("Serial number '{serial_number}' has not been used before.");
+    Ok(TEN_YEARS_IN_SECONDS)
 }
 
 pub async fn get_size_file_pairs(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<i64> {

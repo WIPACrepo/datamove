@@ -33,12 +33,26 @@ cache_dir = "/mnt/data/jade/disk_cache"
 # Configuration of human contacts
 contacts_json_path = "/mnt/data/jade/etc/contacts.json"
 
+# Configuration of the data streams
+data_streams_json_path = "/mnt/data/jade/etc/dataStreams.json"
+
 # Configuration of the disk archives
 disk_archives_json_path = "/mnt/data/jade/etc/diskArchives.json"
 
 # The inbox path where the DiskArchiver will consume archive files
 # that should be sent to archival disks.
 inbox_dir = "/mnt/data/jade/disk_queue"
+
+# The minimum age (in seconds) before we can re-use a disk with the
+# same serial number. If we see the same serial number again "too soon"
+# it means the disk has been reformatted and data has been lost!
+# This is a very serious problem that deserves a big loud alarm.
+minimum_disk_age_seconds = 31536000
+
+# The outbox path where the DiskArchiver will place archive files that
+# have been sent to archival disks. This is the cache, where they will
+# be retained until N copies are fully realized as completed disks.
+outbox_dir = "/mnt/data/jade/disk_cache"
 
 # The problem files directory where the disk archiver should
 # place files that it is having a difficult time processing.

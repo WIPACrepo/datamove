@@ -46,6 +46,7 @@ pub struct SpsDiskArchiverConfig {
     pub data_streams_json_path: String,
     pub disk_archives_json_path: String,
     pub inbox_dir: String,
+    pub minimum_disk_age_seconds: u32,
     pub outbox_dir: String,
     pub problem_files_dir: String,
     pub status_port: u16,

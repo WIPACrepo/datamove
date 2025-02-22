@@ -131,6 +131,15 @@
       },
       {
         "ordinal": 14,
+        "name": "serial_number",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 15,
         "name": "hardware_metadata",
         "type_info": {
           "type": "Blob",
@@ -144,6 +153,7 @@
     },
     "nullable": [
       false,
+      true,
       true,
       true,
       true,

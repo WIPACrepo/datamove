@@ -18,10 +18,11 @@ use crate::config::{
     load_contacts, load_data_streams, load_disk_archives, Contacts, DataStream, DataStreams,
     DiskArchive, DiskArchives,
 };
-use crate::metadata::ArchivalDiskMetadata;
+use crate::metadata::{ArchivalDiskFile, ArchivalDiskMetadata};
 use crate::sps::email::{
     comma_separated_filter, compile_templates, send_email_disk_full, send_email_disk_started,
 };
+use crate::sps::jade_db::service::disk::add_file_pair as add_file_pair_to_disk;
 use crate::sps::jade_db::service::disk::close as close_disk;
 use crate::sps::jade_db::service::disk::create as create_disk;
 use crate::sps::jade_db::service::disk::find_by_uuid as find_disk_by_uuid;
@@ -33,10 +34,11 @@ use crate::sps::jade_db::service::disk_label::get_next_label;
 use crate::sps::jade_db::service::file_pair::{find_by_uuid, JadeFilePair};
 use crate::sps::jade_db::service::host::ensure_host;
 use crate::sps::jade_db::service::host::JadeHost;
+use crate::sps::utils::crypto::compute_sha512;
 use crate::sps::utils::lsblk::get_serial_for_mountpoint;
 use crate::sps::utils::{
-    count_uuid_labels, get_file_count, get_free_space, get_oldest_file_age_in_secs, is_mount_point,
-    is_writable_dir, move_file, touch_label,
+    count_uuid_labels, create_directory, flush_to_disk, get_file_count, get_free_space,
+    get_oldest_file_age_in_secs, is_mount_point, is_writable_dir, move_file, touch_label,
 };
 use crate::status::sps::{Disk, DiskArchiverStatus, DiskStatus};
 use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
@@ -185,28 +187,122 @@ async fn archive_file_pair_to_archives(
 /// (i.e.: IceCube Copy 1)
 async fn archive_file_pair_to_disk(
     disk_archiver: &DiskArchiver,
-    _file_pair_path: &Path,
-    _jade_file_pair: &JadeFilePair,
-    _data_stream: &DataStream,
+    file_pair_path: &Path,
+    jade_file_pair: &JadeFilePair,
+    data_stream: &DataStream,
     disk_archive: &DiskArchive,
     copy_id: u64,
 ) -> Result<()> {
-    let _jade_disk = find_or_create_archive_copy(disk_archiver, disk_archive, copy_id).await?;
-
-    // archiveFilePairToDiskCopy(filePair, host, diskArchive, copyId)
-    //     findOrCreateArchivalCopy(host, diskArchive, copyId)
-    //         findArchivalCopy(host, diskArchive, copyId)
-    //         if(no-archival-copy) {
-    //             createArchivalCopy(host, diskArchive, copyId)
-    //             findArchivalCopy(host, diskArchive, copyId)
-    //         }
-    //     addFilePairToCopyPath(filePair, destDisk)
-    //         addFilePairToDisk(diskLabel, filePair)
-    // todo!();
-
-    // tell the caller that the file pair was archived successfully
-    // Ok(())
-    todo!("archive_file_pair_to_disk() not finished!")
+    // until we find a disk to which we can write our file pair
+    let mut dest_disk: Option<JadeDisk> = None;
+    while dest_disk.is_none() {
+        // find or create an archival disk to write the file pair to
+        let jade_disk = find_or_create_archive_copy(disk_archiver, disk_archive, copy_id).await?;
+        // make sure the disk we found is physically present and usable
+        if !is_okay_to_archive_to(&jade_disk) {
+            let msg = format!(
+                "{} is NOT OK! The database told us Disk {}:{} (Copy {}) ({}) could be used, but it can't be used!",
+                jade_disk.device_path,
+                jade_disk.jade_disk_id,
+                jade_disk.device_path,
+                jade_disk.copy_id,
+                jade_disk.uuid,
+            );
+            error!("{msg}");
+            return Err(msg.into());
+        }
+        // determine how much space is available and how much we need
+        let archive_headroom = disk_archiver
+            .context
+            .config
+            .sps_disk_archiver
+            .archive_headroom;
+        let space_available = get_free_space(&jade_disk.device_path)? - archive_headroom;
+        let space_needed = jade_file_pair
+            .archive_size
+            .expect("jade_file_pair.archive_size IS null") as u64;
+        let archive_file = jade_file_pair
+            .archive_file
+            .clone()
+            .expect("jade_file_pair.archive_file IS null");
+        // if we don't have sufficient room on this disk
+        if space_available < space_needed {
+            // log about it
+            info!(
+                "{} ({} bytes free) does not have sufficient space for {} ({} bytes)",
+                jade_disk.device_path, space_available, archive_file, space_needed
+            );
+            // close the disk
+            let pool = &disk_archiver.context.db_pool;
+            close_disk(pool, &jade_disk).await?;
+            // try again
+            continue;
+        }
+        // yay, we found a disk to which we can write our file pair
+        dest_disk = Some(jade_disk);
+    }
+    // if the disk is marked bad or on-hold, just bail out now
+    let jade_disk = dest_disk.expect("How did None escape the dest_disk loop?");
+    if jade_disk.bad {
+        let msg = format!(
+            "DiskService returned Disk {} ({}) which is marked BAD.",
+            jade_disk.jade_disk_id, jade_disk.uuid,
+        );
+        error!("{msg}");
+        return Err(msg.into());
+    }
+    if jade_disk.on_hold {
+        let msg = format!(
+            "DiskService returned Disk {} ({}) which is marked ON-HOLD.",
+            jade_disk.jade_disk_id, jade_disk.uuid,
+        );
+        error!("{msg}");
+        return Err(msg.into());
+    }
+    // determine the directory where we'll copy the file
+    let disk_path = Path::new(&jade_disk.device_path);
+    let date_modified_origin = jade_file_pair
+        .date_modified_origin
+        .expect("jade_file_pair.date_modified_origin IS null");
+    let archival_path = data_stream.compute_data_warehouse_path(&date_modified_origin);
+    let dest_dir_path = disk_path.join(archival_path);
+    let file_pair_name = file_pair_path
+        .file_name()
+        .expect("File pair filename cannot be represented as UTF-8");
+    let dest_path = dest_dir_path.join(file_pair_name);
+    // copy the file pair to the destination archival disk (with チェックサム)
+    create_directory(&dest_dir_path)?;
+    fs::copy(file_pair_path, &dest_path)?;
+    flush_to_disk(&dest_path)?;
+    let dest_checksum = compute_sha512(&dest_path)?;
+    let archive_checksum = jade_file_pair
+        .archive_checksum
+        .as_ref()
+        .expect("jade_file_pair.archive_checksum IS null")
+        .clone();
+    if dest_checksum != archive_checksum {
+        let msg = format!(
+            "Checksum mismatch for file: {}\nDatabase checksum:  {}\nDisk checksum:      {}",
+            dest_path.to_string_lossy(),
+            archive_checksum,
+            dest_checksum
+        );
+        error!("{msg}");
+        return Err(msg.into());
+    }
+    // write the metadata for the file pair to the destination archival disk
+    let archival_disk_file = create_archival_disk_file(disk_archiver, jade_file_pair).await;
+    let device_root = &jade_disk.device_path;
+    let uuid = &jade_file_pair
+        .jade_file_pair_uuid
+        .clone()
+        .expect("jade_file_pair.jade_file_pair_uuid IS null");
+    save_archival_disk_file(device_root, uuid, &archival_disk_file)?;
+    // update the database to indicate
+    let pool = &disk_archiver.context.db_pool;
+    add_file_pair_to_disk(pool, &jade_disk, jade_file_pair).await?;
+    // inform the caller that all went well
+    Ok(())
 }
 
 /// archive everything in the inbox to the disk archives they are destined for
@@ -636,6 +732,102 @@ async fn create_archive_copy(
     Ok(())
 }
 
+pub async fn create_archival_disk_file(
+    disk_archiver: &DiskArchiver,
+    jade_file_pair: &JadeFilePair,
+) -> ArchivalDiskFile {
+    // compute the things we need to compute with the metadata
+    let fetched_by_host = &disk_archiver.host.host_name;
+    let date_verified = match jade_file_pair.date_verified {
+        Some(date_verified) => date_verified.and_utc().timestamp_millis(),
+        None => 0,
+    };
+    // capture the file metadata to be written to the disk
+    ArchivalDiskFile {
+        archive_checksum: jade_file_pair
+            .archive_checksum
+            .clone()
+            .expect("jade_file_pair.archive_checksum IS null"),
+        archive_file: jade_file_pair
+            .archive_file
+            .clone()
+            .expect("jade_file_pair.archive_file IS null"),
+        archive_size: jade_file_pair
+            .archive_size
+            .expect("jade_file_pair.archive_size IS null"),
+        binary_file: jade_file_pair
+            .binary_file
+            .clone()
+            .expect("jade_file_pair.binary_file IS null"),
+        binary_size: jade_file_pair
+            .binary_size
+            .expect("jade_file_pair.binary_size IS null"),
+        data_stream_id: jade_file_pair
+            .jade_data_stream_id
+            .expect("jade_file_pair.jade_data_stream_id IS null"),
+        data_stream_uuid: jade_file_pair
+            .jade_file_pair_uuid
+            .clone()
+            .expect("jade_file_pair.jade_file_pair_uuid IS null"),
+        data_warehouse_path: jade_file_pair
+            .data_warehouse_path
+            .clone()
+            .expect("jade_file_pair.data_warehouse_path IS null"),
+        date_created: jade_file_pair
+            .date_created
+            .expect("jade_file_pair.date_created IS null")
+            .and_utc()
+            .timestamp_millis(),
+        date_fetched: jade_file_pair
+            .date_fetched
+            .expect("jade_file_pair.date_fetched IS null")
+            .and_utc()
+            .timestamp_millis(),
+        date_processed: jade_file_pair
+            .date_processed
+            .expect("jade_file_pair.date_processed IS null")
+            .and_utc()
+            .timestamp_millis(),
+        date_updated: jade_file_pair
+            .date_updated
+            .expect("jade_file_pair.date_updated IS null")
+            .and_utc()
+            .timestamp_millis(),
+        date_verified,
+        disk_count: 0,
+        fetch_checksum: jade_file_pair
+            .fetch_checksum
+            .clone()
+            .expect("jade_file_pair.fetch_checksum IS null"),
+        fetched_by_host: fetched_by_host.clone(),
+        fingerprint: jade_file_pair
+            .fingerprint
+            .clone()
+            .expect("jade_file_pair.fingerprint IS null"),
+        metadata_file: jade_file_pair
+            .metadata_file
+            .clone()
+            .expect("jade_file_pair.metadata_file IS null"),
+        origin_checksum: jade_file_pair
+            .origin_checksum
+            .clone()
+            .expect("jade_file_pair.origin_checksum IS null"),
+        origin_modification_date: jade_file_pair
+            .date_modified_origin
+            .expect("jade_file_pair.date_modified_origin IS null")
+            .and_utc()
+            .timestamp_millis(),
+        semaphore_file: jade_file_pair
+            .semaphore_file
+            .clone()
+            .expect("jade_file_pair.semaphore_file IS null"),
+        uuid: jade_file_pair
+            .jade_file_pair_uuid
+            .clone()
+            .expect("jade_file_pair.uuid IS null"),
+    }
+}
+
 pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
     // start the work cycle
     info!("Starting DiskArchiver work cycle.");
@@ -821,6 +1013,73 @@ fn get_required_copies(disk_archiver: &DiskArchiver) -> Result<u64> {
     Ok(required_copies)
 }
 
+// Verify that the provided JadeDisk is physically present and in good
+// condition to be used for archiving a file pair.
+fn is_okay_to_archive_to(disk: &JadeDisk) -> bool {
+    // the disk tells us where it should be mounted; so check that place
+    let disk_path = &disk.device_path;
+    // if the path doesn't exist
+    match fs::exists(disk_path) {
+        Ok(exists) => {
+            if !exists {
+                error!("{} doesn't exist; unable to write archive.", disk_path);
+                return false;
+            }
+        }
+        Err(e) => {
+            error!("{} doesn't exist; unable to write archive.", disk_path);
+            error!("Error was: {e}");
+            return false;
+        }
+    }
+    // if the path isn't writable
+    if is_writable_dir(disk_path) {
+        error!(
+            "{} cannot be written to; unable to write archive.",
+            disk_path
+        );
+        return false;
+    }
+    // if the path isn't a mount point (i.e.: a disk isn't mounted there)
+    if !is_mount_point(disk_path) {
+        error!(
+            "{} is NOT a mount point; unable to write archive.",
+            disk_path
+        );
+        return false;
+    }
+    // get all the UUID label files that we find on the disk
+    let disk_labels = match read_disk_labels(Path::new(disk_path)) {
+        Ok(disk_labels) => disk_labels,
+        Err(e) => {
+            error!(
+                "{} cannot be checked for UUID labels. (Error: {e})",
+                disk_path
+            );
+            return false;
+        }
+    };
+    // if there isn't EXACTLY one uuid label file on the disk
+    if disk_labels.len() != 1 {
+        error!(
+            "{} doesn't have a unique UUID label; unable to write archive.",
+            disk_path
+        );
+        return false;
+    }
+    // if the uuid label file on the disk doesn't match the disk the database expects there
+    if disk_labels[0] != disk.uuid {
+        error!(
+            "{} doesn't match UUID label! DB Expects:{}  Disk Has:{}; unable to write archive.",
+            disk_path, disk.uuid, disk_labels[0],
+        );
+        return false;
+    }
+    // having survived the gauntlet, the archival disk has been
+    // properly vetted for use; we may now write the file pair
+    true
+}
+
 fn parse_uuid_from_filename(path: &Path) -> Option<String> {
     // create a RegEx to match JADE's filename pattern `ukey_$UUID_`
     let uuid_regex = Regex::new(r"ukey_([a-f0-9-]{36})_").unwrap();
@@ -888,6 +1147,27 @@ fn remove_uuids_from_cache(cache_path: &Path, delete_set: &HashSet<String>) -> s
         }
     }
     // tell the caller that we successfully removed files from the cache
+    Ok(())
+}
+
+/// Serializes an ArchivalDiskFile to JSON and writes it to a structured directory.
+pub fn save_archival_disk_file(
+    device_root: &str,
+    uuid: &str,
+    archival_disk_file: &ArchivalDiskFile,
+) -> Result<()> {
+    let hex_1 = &uuid[0..1];
+    let hex_2 = &uuid[1..2];
+
+    let dir_path = format!("{}/metadata/{}/{}", device_root, hex_1, hex_2);
+    create_directory(Path::new(&dir_path))?;
+
+    let file_path = format!("{}/{}.json", dir_path, uuid);
+    let json_data = serde_json::to_string_pretty(archival_disk_file)?;
+
+    let mut file = File::create(&file_path)?;
+    file.write_all(json_data.as_bytes())?;
+
     Ok(())
 }
 

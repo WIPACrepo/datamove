@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "\n            SELECT *\n            FROM jade_disk \n            WHERE bad = false\n                AND closed = false\n                AND copy_id = ?\n                AND jade_host_id = ?\n                AND disk_archive_uuid = ?\n        ",
+  "query": "\n            SELECT *\n            FROM jade_disk\n            WHERE bad = false\n                AND closed = false\n                AND copy_id = ?\n                AND jade_host_id = ?\n                AND disk_archive_uuid = ?\n        ",
   "describe": {
     "columns": [
       {
@@ -170,5 +170,5 @@
       true
     ]
   },
-  "hash": "e196e22831f567573e42d1f8883ab674d1a799bbe66f0bbd2be9bec27886091b"
+  "hash": "fc74f908268c02ab93429f313348e60ba7ca39a6b9ea9c81ecb13e585bf96ddd"
 }

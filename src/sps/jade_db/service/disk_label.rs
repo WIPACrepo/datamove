@@ -95,7 +95,7 @@ pub async fn get_next_label(
         repo_get_next_label(pool, disk_archive_uuid, copy_id, disk_archive_year).await?;
     let name = &disk_archive.short_name;
     Ok(format!(
-        "{}_{}_{}_{}",
+        "{}_{}_{}_{:04}",
         name, copy_id, disk_archive_year, sequence_number
     ))
 }

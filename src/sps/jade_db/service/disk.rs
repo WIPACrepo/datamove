@@ -6,6 +6,8 @@ use sqlx::MySqlPool;
 use std::collections::HashSet;
 
 use crate::config::DiskArchive;
+use crate::sps::jade_db::repo::disk::add_file_pair as repo_add_file_pair;
+use crate::sps::jade_db::repo::disk::count_file_pair_copies as repo_count_file_pair_copies;
 use crate::sps::jade_db::repo::disk::create as repo_create;
 use crate::sps::jade_db::repo::disk::find_by_uuid as repo_find_by_uuid;
 use crate::sps::jade_db::repo::disk::find_open as repo_find_open;
@@ -15,6 +17,7 @@ use crate::sps::jade_db::repo::disk::get_serial_number_age_in_secs as repo_get_s
 use crate::sps::jade_db::repo::disk::get_size_file_pairs as repo_get_size_file_pairs;
 use crate::sps::jade_db::repo::disk::save as repo_save;
 use crate::sps::jade_db::repo::disk::MySqlJadeDisk;
+use crate::sps::jade_db::service::file_pair::JadeFilePair;
 use crate::sps::jade_db::utils::convert_primitive_date_time_to_naive_date_time as to_naive_date_time;
 use crate::sps::process::disk_archiver::DiskArchiver;
 
@@ -77,6 +80,14 @@ impl From<MySqlJadeDisk> for JadeDisk {
     }
 }
 
+pub async fn add_file_pair(
+    pool: &MySqlPool,
+    jade_disk: &JadeDisk,
+    file_pair: &JadeFilePair,
+) -> Result<()> {
+    repo_add_file_pair(pool, jade_disk.jade_disk_id, file_pair.jade_file_pair_id).await
+}
+
 pub async fn close(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<u64> {
     let jade_disk_id = jade_disk.jade_disk_id;
     let disk_uuid = &jade_disk.uuid;
@@ -106,6 +117,13 @@ pub async fn close(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<u64> {
 pub async fn close_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<u64> {
     let jade_disk = find_by_uuid(pool, find_uuid).await?;
     close(pool, &jade_disk).await
+}
+
+pub async fn count_file_pair_copies(
+    pool: &MySqlPool,
+    jade_file_pair: &JadeFilePair,
+) -> Result<i64> {
+    repo_count_file_pair_copies(pool, jade_file_pair.jade_file_pair_id).await
 }
 
 pub async fn create(pool: &MySqlPool, jade_disk: &JadeDisk) -> Result<u64> {

@@ -3,7 +3,7 @@
 use chrono::NaiveDateTime;
 use num_traits::cast::ToPrimitive;
 use sqlx::types::time::PrimitiveDateTime;
-use sqlx::{FromRow, MySqlPool};
+use sqlx::{FromRow, MySql, MySqlPool, Transaction};
 use std::collections::HashSet;
 use time::OffsetDateTime;
 
@@ -63,6 +63,87 @@ impl From<&JadeDisk> for MySqlJadeDisk {
             hardware_metadata: Some(value.hardware_metadata.clone()),
         }
     }
+}
+
+pub async fn add_file_pair(
+    pool: &MySqlPool,
+    jade_disk_id: i64,
+    jade_file_pair_id: i64,
+) -> Result<()> {
+    // create a transaction to update the disk contents atomically
+    let mut tx: Transaction<MySql> = pool.begin().await?;
+    // check if the mapping already exists
+    let exists = sqlx::query_scalar!(
+        r#"
+        SELECT 1
+        FROM jade_map_disk_to_file_pair
+        WHERE jade_disk_id = ?
+          AND jade_file_pair_id = ?
+        "#,
+        jade_disk_id,
+        jade_file_pair_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    // if the mapping already exists, bail out
+    if exists.is_some() {
+        tx.rollback().await?;
+        return Ok(());
+    }
+    // determine the next order value (starting from 0)
+    let next_order = sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(MAX(jade_file_pair_order) + 1, 0)
+        FROM jade_map_disk_to_file_pair
+        WHERE jade_disk_id = ?
+        "#,
+        jade_disk_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    // insert the new mapping
+    let _result = sqlx::query!(
+        r#"
+        INSERT INTO jade_map_disk_to_file_pair (
+            jade_disk_id,
+            jade_file_pair_id,
+            jade_file_pair_order
+        ) VALUES (
+            ?,
+            ?,
+            ?
+        )
+        "#,
+        jade_disk_id,
+        jade_file_pair_id,
+        next_order
+    )
+    .execute(&mut *tx)
+    .await?;
+    // commit the transaction to the database
+    tx.commit().await?;
+    // tell the caller that we succeeded
+    Ok(())
+}
+
+pub async fn count_file_pair_copies(pool: &MySqlPool, jade_file_pair_id: i64) -> Result<i64> {
+    // query the database to determine how many good copies of a file exist on archival disks
+    let copy_count = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(jmdtfp.jade_disk_id) as copy_count
+        FROM jade_map_disk_to_file_pair AS jmdtfp
+        LEFT JOIN jade_disk AS jd ON jd.jade_disk_id = jmdtfp.jade_disk_id
+        WHERE jmdtfp.jade_file_pair_id = ?
+          AND jd.bad = false
+          AND jd.closed = true
+          AND jd.on_hold = false
+        "#,
+        jade_file_pair_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    // return that result to the caller
+    Ok(copy_count)
 }
 
 pub async fn create(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {

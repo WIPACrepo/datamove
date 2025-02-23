@@ -1,11 +1,12 @@
 // utils.rs
 
+pub mod crypto;
 pub mod lsblk;
 
 use fs2::{free_space, total_space};
 use log::{error, info};
 use std::cmp::max;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -36,6 +37,23 @@ pub fn count_uuid_labels(path_str: &str) -> Result<u64> {
     }
     // return the count to the caller
     Ok(count)
+}
+
+/// TODO: write documentation comment
+pub fn create_directory(dir_path: &Path) -> Result<()> {
+    match fs::create_dir_all(dir_path) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("{e}").into()),
+    }
+}
+
+/// TODO: write documentation comment
+pub fn flush_to_disk(path: &Path) -> Result<()> {
+    // open the file
+    let file = File::open(path)?;
+    // ensure all the data and metadata are flushed to disk
+    file.sync_all()?;
+    Ok(())
 }
 
 /// Determine the count of files in the provided directory.

@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT COUNT(jmdtfp.jade_disk_id) as copy_count\n        FROM jade_map_disk_to_file_pair AS jmdtfp\n        LEFT JOIN jade_disk AS jd ON jd.jade_disk_id = jmdtfp.jade_disk_id\n        WHERE jmdtfp.jade_file_pair_id = ?\n          AND jd.bad = false\n          AND jd.closed = true\n          AND jd.on_hold = false\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "copy_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "da0cd4ed64427d1363da34d6232934a1fa37060f42c488ad9e9cabca5e07fac1"
+}

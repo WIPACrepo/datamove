@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        INSERT INTO jade_map_disk_to_file_pair (\n            jade_disk_id,\n            jade_file_pair_id,\n            jade_file_pair_order\n        ) VALUES (\n            ?,\n            ?,\n            ?\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "002b45477f44eb75b6e3c59dd54d227a893525bfb22178535695be28f68a5d56"
+}

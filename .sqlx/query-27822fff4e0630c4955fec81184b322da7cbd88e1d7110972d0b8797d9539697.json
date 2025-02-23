@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT COALESCE(MAX(jade_file_pair_order) + 1, 0)\n        FROM jade_map_disk_to_file_pair\n        WHERE jade_disk_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "COALESCE(MAX(jade_file_pair_order) + 1, 0)",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "max_size": 12
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "27822fff4e0630c4955fec81184b322da7cbd88e1d7110972d0b8797d9539697"
+}

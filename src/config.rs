@@ -1,5 +1,6 @@
 // config.rs
 
+use chrono::{Datelike, NaiveDateTime};
 use lettre::{message::Mailbox, Address};
 use serde::{Deserialize, Serialize};
 use std::{fs::File, str::FromStr};
@@ -186,6 +187,23 @@ pub struct DataStream {
     pub archives: Vec<String>,
     #[serde(rename = "retroDiskPolicy")]
     pub retro_disk_policy: RetroDiskPolicy,
+}
+
+impl DataStream {
+    pub fn compute_data_warehouse_path(&self, datetime: &NaiveDateTime) -> String {
+        let stream_metadata = &self.stream_metadata;
+        let date = datetime.date();
+
+        format!(
+            "{}/{}/{}/{}/{:02}{:02}",
+            stream_metadata.sensor_name,
+            date.year(),
+            stream_metadata.category,
+            stream_metadata.subcategory,
+            date.month(),
+            date.day()
+        )
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

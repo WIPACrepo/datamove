@@ -7,6 +7,9 @@ use crate::sps::jade_db::service::disk::JadeDisk;
 /// metadata for an archival disk
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ArchivalDiskMetadata {
+    #[serde(rename = "version")]
+    pub version: i64,
+
     #[serde(rename = "capacity")]
     pub capacity: i64,
 
@@ -35,6 +38,7 @@ pub struct ArchivalDiskMetadata {
 impl From<&JadeDisk> for ArchivalDiskMetadata {
     fn from(value: &JadeDisk) -> Self {
         ArchivalDiskMetadata {
+            version: 2,
             capacity: value.capacity,
             copy_id: value.copy_id,
             date_created: value.date_created.and_utc().timestamp_millis(),

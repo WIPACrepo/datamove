@@ -278,6 +278,10 @@ pub async fn get_removable_files(
     loaded_disk_ids: &Vec<i64>,
     required_copies: u64,
 ) -> Result<HashSet<String>> {
+    // if no disks are loaded, return an empty set
+    if loaded_disk_ids.is_empty() {
+        return Ok(HashSet::new());
+    }
     // create placeholders; 4 ids = ?,?,?,?
     let placeholders = loaded_disk_ids
         .iter()

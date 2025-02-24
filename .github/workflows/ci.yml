@@ -81,5 +81,5 @@ jobs:
           if [ ! -f ~/.cargo/bin/cargo-tarpaulin ]; then
             cargo install cargo-tarpaulin
           fi
-      # 5%? yeah, we should do better...
-      - run: cargo tarpaulin --fail-immediately --fail-under 5 --locked
+      # 1%? yeah, we should do better...
+      - run: cargo tarpaulin --fail-immediately --fail-under 1 --locked

@@ -1,7 +1,7 @@
 // disk_archiver.rs
 
 use chrono::{NaiveDateTime, Utc};
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use rand::seq::SliceRandom;
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -394,7 +394,7 @@ async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &st
     let path = Path::new(disk_path);
     // if the path doesn't exist at all, we can't use it
     if !path.exists() {
-        error!("Archival disk path '{}' does not exist.", path.display());
+        debug!("Archival disk path '{}' does not exist.", path.display());
         return Disk::for_status(DiskStatus::NotUsable);
     }
     // if we can't write to the path, we can't use it
@@ -408,7 +408,7 @@ async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &st
             let _ = fs::remove_file(&temp_path);
         }
         Err(_) => {
-            error!("Archival disk path '{}' is not writable.", path.display());
+            debug!("Archival disk path '{}' is not writable.", path.display());
             return Disk::for_status(DiskStatus::NotUsable);
         }
     }
@@ -420,7 +420,7 @@ async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &st
     let disk_labels = match read_disk_labels(path) {
         Ok(labels) => labels,
         Err(_) => {
-            error!(
+            debug!(
                 "Unable to read disk labels from archival disk path '{}'",
                 path.display()
             );
@@ -429,7 +429,7 @@ async fn build_archival_disk_status(disk_archiver: &DiskArchiver, disk_path: &st
     };
     // if there are too many labels, this disk is not usable
     if disk_labels.len() > 1 {
-        error!(
+        debug!(
             "Archival disk path '{}' contains multiple UUID disk label files.",
             path.display()
         );

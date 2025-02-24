@@ -1,0 +1,100 @@
+{
+    "dataStreams": [
+        {
+            "id": 3,
+            "uuid": "ef16d255-0b63-483f-b8bd-34e9179c93b1",
+            "active": false,
+            "compression": "GZIP",
+            "fileHost": "testdaq01",
+            "filePath": "/mnt/data/testdaq/dropbox/tape/overflow",
+            "filePrefix": "SPS-TESTDAQ01",
+            "binarySuffix": ".dat.tar",
+            "semaphoreSuffix": ".sem",
+            "credentials": {
+                "username": "jade",
+                "sshKeyPath": "/home/jade/.ssh/id_rsa"
+            },
+            "workflowBean": "archiveStreamWorkflow",
+            "streamMetadata": {
+                "category": "TestDAQ",
+                "dataCenterEmail": "datacenter@icecube.wisc.edu",
+                "dataCenterName": "UWI-MAD/A3RI > Antarctic Astronomy and Astrophysics Research Institute, University of Wisconsin, Madison",
+                "entryTitle": "TestDAQ data from South Pole",
+                "parameters": "SPACE SCIENCE > Astrophysics > Neutrinos",
+                "difSensorName": "ICECUBE > IceCube",
+                "sensorName": "IceCube",
+                "subcategory": "SouthPole",
+                "technicalContactEmail": "john.kelley@icecube.wisc.edu",
+                "technicalContactName": "John Kelley"
+            },
+            "archives": [
+                "Disk-IceCube"
+            ],
+            "retroDiskPolicy": "archive"
+        },
+        {
+            "id": 5,
+            "uuid": "2720c9d9-011b-4cef-808e-359bcfbf3986",
+            "active": false,
+            "compression": "GZIP",
+            "fileHost": "cvmaster",
+            "filePath": "/mnt/data/cnvlocal/tape",
+            "filePrefix": "SPS-CV-ROOT-FILES",
+            "binarySuffix": ".root.tar",
+            "semaphoreSuffix": ".meta.xml",
+            "credentials": {
+                "username": "jade",
+                "sshKeyPath": "/home/jade/.ssh/id_rsa"
+            },
+            "workflowBean": "archiveStreamWorkflow",
+            "streamMetadata": {
+                "category": "verification",
+                "dataCenterEmail": "datacenter@icecube.wisc.edu",
+                "dataCenterName": "UWI-MAD/A3RI > Antarctic Astronomy and Astrophysics Research Institute, University of Wisconsin, Madison",
+                "entryTitle": "Tarball of archived .root files from Verification results at the Pole",
+                "parameters": "SPACE SCIENCE > Astrophysics > Neutrinos",
+                "difSensorName": "ICECUBE > IceCube",
+                "sensorName": "IceCube",
+                "subcategory": "SouthPole",
+                "technicalContactEmail": "jason.koskinen@icecube.wisc.edu",
+                "technicalContactName": "Jason Koskinen"
+            },
+            "archives": [
+                "Disk-IceCube"
+            ],
+            "retroDiskPolicy": "archive"
+        },
+        {
+            "id": 6,
+            "uuid": "9f890e94-1ddd-4d34-b04d-93b14a56d5cc",
+            "active": false,
+            "compression": "GZIP",
+            "fileHost": "cvmaster",
+            "filePath": "/mnt/data/cnvlocal/tape",
+            "filePrefix": "SPS-CV-LOG-FILES",
+            "binarySuffix": ".log.tar",
+            "semaphoreSuffix": ".meta.xml",
+            "credentials": {
+                "username": "jade",
+                "sshKeyPath": "/home/jade/.ssh/id_rsa"
+            },
+            "workflowBean": "archiveStreamWorkflow",
+            "streamMetadata": {
+                "category": "verification",
+                "dataCenterEmail": "datacenter@icecube.wisc.edu",
+                "dataCenterName": "UWI-MAD/A3RI > Antarctic Astronomy and Astrophysics Research Institute, University of Wisconsin, Madison",
+                "entryTitle": "Logs from the archived verification root files (from pbs_output directory)",
+                "parameters": "SPACE SCIENCE > Astrophysics > Neutrinos",
+                "difSensorName": "ICECUBE > IceCube",
+                "sensorName": "IceCube",
+                "subcategory": "SouthPole",
+                "technicalContactEmail": "koskinen@icecube.wisc.edu",
+                "technicalContactName": "Jason Koskinen"
+            },
+            "archives": [
+                "Disk-IceCube"
+            ],
+            "retroDiskPolicy": "archive"
+        }
+    ]
+}

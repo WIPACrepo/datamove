@@ -17,7 +17,7 @@ env_logger = "0.11.6"
 fs2 = "0.4.3"
 hostname = "0.4.0"
 lettre = "0.11.14"
-log = "0.4.26"
+# log = "0.4.26"
 num-format = "0.4.4"
 num-traits = "0.2.19"
 rand = "0.9.0"
@@ -30,7 +30,26 @@ tera = "1.20.0"
 time = "0.3.37"
 tokio = { version = "1.43.0", features = ["full"] }
 toml = "0.8.20"
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
 uuid = { version = "1.14.0", features = ["v4"] }
 
 [dev-dependencies]
 filetime = "0.2.25"
+
+[package.metadata.generate-rpm]
+name = "datamove"
+license = "UNLICENSED"
+assets = [
+    { source = "etc/*", dest = "/mnt/data/jade/etc", mode = "644", user = "jade", group = "jade" },
+    { source = "target/release/disk_archiver", dest = "/usr/local/jade/bin/datamove/disk_archiver", mode = "755" },
+]
+pre_install_script = """
+mkdir -p /mnt/data/jade/disk_work
+chown jade:jade /mnt/data/jade/disk_work
+mkdir -p /usr/local/jade/bin/datamove
+"""
+
+[package.metadata.generate-rpm.requires]
+openssl = "*"

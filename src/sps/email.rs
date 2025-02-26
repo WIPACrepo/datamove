@@ -1,13 +1,14 @@
 // email.rs
 
-use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport};
-use log::{error, info, warn};
-use num_format::{Locale, ToFormattedString};
-use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
+
+use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport};
+use num_format::{Locale, ToFormattedString};
+use serde::Serialize;
 use tera::Result as TeraResult;
 use tera::{from_value, to_value, Context, Tera, Value};
+use tracing::{error, info, warn};
 
 use crate::config::{Contact, ContactRole, EmailConfig};
 use crate::sps::jade_db::service::disk::JadeDisk;
@@ -433,9 +434,9 @@ pub async fn send_email_disk_started(
     Ok(())
 }
 
-//---------------------------------------------------------------------------
-//---------------------------------------------------------------------------
-//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -468,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_tera_template_close_archive() -> Result<()> {
-        let mut tera = Tera::new("tests/data/**/*.tera")?;
+        let mut tera = Tera::new("etc/**/*.tera")?;
         tera.register_filter("comma", comma_separated_filter);
 
         let mut context: Context = Context::default();
@@ -610,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_tera_template_create_archive() -> Result<()> {
-        let mut tera = Tera::new("tests/data/**/*.tera")?;
+        let mut tera = Tera::new("etc/**/*.tera")?;
         tera.register_filter("comma", comma_separated_filter);
 
         let mut context: Context = Context::default();

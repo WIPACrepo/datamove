@@ -1,9 +1,10 @@
 // disk.rs
 
-use chrono::{NaiveDateTime, Utc};
-use log::{error, info, trace};
-use sqlx::MySqlPool;
 use std::collections::HashSet;
+
+use chrono::{NaiveDateTime, Utc};
+use sqlx::MySqlPool;
+use tracing::{error, info, trace};
 
 use crate::config::DiskArchive;
 use crate::sps::jade_db::repo::disk::add_file_pair as repo_add_file_pair;

@@ -1,16 +1,17 @@
 // disk_archiver.rs
 
-use chrono::{NaiveDateTime, Utc};
-use log::{debug, error, info, trace, warn};
-use rand::seq::SliceRandom;
-use regex::Regex;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+
+use chrono::{NaiveDateTime, Utc};
+use rand::seq::SliceRandom;
+use regex::Regex;
 use tera::Tera;
 use tokio::time::{sleep, Duration};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::adhoc::utils::next_file;

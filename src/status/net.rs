@@ -1,11 +1,12 @@
 // net.rs
 
+use std::sync::Arc;
+
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use axum_extra::response::ErasedJson;
-use log::warn;
 use serde_json::json;
-use std::sync::Arc;
 use tokio::sync::Notify;
+use tracing::warn;
 
 use crate::sps::process::disk_archiver::DiskArchiver;
 

@@ -4,18 +4,18 @@
 
 [email_configuration]
 enabled = true
-from = "spadedev@icecube.wisc.edu"
-host = "mail.icecube.wisc.edu"
-password = "hunter2"
+from = "fred.bloggs@icecube.wisc.edu"
+host = "mail.service.hostname"
+password = "bloggs1234"
 port = 25
-reply_to = "spadedev@icecube.wisc.edu"
-username = "spadedev@icecube.wisc.edu"
+reply_to = "fred.bloggs@icecube.wisc.edu"
+username = "fred.bloggs@icecube.wisc.edu"
 
 [jade_database]
 host = "127.0.0.1"
 port = 3306
 username = "jade"
-password = "hunter2"
+password = "bloggs1234"
 database_name = "jade"
 
 [sps_disk_archiver]

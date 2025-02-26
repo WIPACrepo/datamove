@@ -3,19 +3,37 @@
 // #![feature(trivial_bounds)]
 #![forbid(unsafe_code)]
 
-use axum::{routing::get, routing::post, Router};
-use log::{error, info};
 use std::sync::Arc;
+
+use axum::{routing::get, routing::post, Router};
 use tokio::{net::TcpListener, sync::Notify, try_join};
+use tracing::{error, info};
+use tracing_appender::rolling;
+use tracing_subscriber::EnvFilter;
 
 use wipac_datamove::sps::{context::load_context, process::disk_archiver::DiskArchiver};
 use wipac_datamove::status::net::{get_status_disk_archiver, post_shutdown_disk_archiver};
 
 #[tokio::main]
 async fn main() {
-    // set up logging
-    env_logger::init();
-    info!("Hello, disk-archiver!");
+    // set up log file rotation (daily)
+    let file_appender = rolling::daily("/mnt/data/jade/log", "disk_archiver.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // initialize logging with both file and console output
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(non_blocking) // logs to file
+        .with_env_filter(EnvFilter::from_default_env()) // reads RUST_LOG
+        .with_level(true) // include log levels
+        .with_ansi(false) // no ANSI colors in file logs
+        .finish();
+
+    // set up our logging as the global default
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set up logging");
+
+    // log our first message
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    info!("Hello, disk-archiver v{VERSION}!");
 
     // create a new DiskArchiver
     let context = load_context();

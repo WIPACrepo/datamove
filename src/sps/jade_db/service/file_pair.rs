@@ -1,9 +1,9 @@
 // file_pair.rs
 
 use chrono::NaiveDateTime;
-use log::error;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::MySqlPool;
+use tracing::error;
 
 use crate::sps::jade_db::repo::file_pair::find_by_uuid as repo_find_by_uuid;
 use crate::sps::jade_db::repo::file_pair::MySqlJadeFilePair;

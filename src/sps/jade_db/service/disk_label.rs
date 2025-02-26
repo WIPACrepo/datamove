@@ -2,8 +2,8 @@
 
 use chrono::Datelike;
 use chrono::{NaiveDateTime, Utc};
-use log::error;
 use sqlx::MySqlPool;
+use tracing::error;
 
 use crate::config::DiskArchive;
 use crate::sps::jade_db::repo::disk_label::find_by_id as repo_find_by_id;

@@ -15,3 +15,6 @@ datamove.toml
 
 # don't version the sql directory
 /sql
+
+# don't version .rpm files
+*.rpm

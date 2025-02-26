@@ -1,4 +1,4 @@
-jade has filled an archival disk.
+datamove has filled an archival disk.
 
 Host:         jade01
 Archive:      IceCube Disk Archive

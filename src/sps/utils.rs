@@ -3,14 +3,15 @@
 pub mod crypto;
 pub mod lsblk;
 
-use fs2::{free_space, total_space};
-use log::{error, info};
 use std::cmp::max;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
+
+use fs2::{free_space, total_space};
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub type Error = Box<dyn core::error::Error>;

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# setup-dev-env
+
+# Debian / Ubuntu / Mint - Install System Packages
+if [ "$(grep -Ei 'debian|buntu|mint' /etc/*release)" ]; then
+    # install libmysqlclient-dev
+    if ! dpkg -l | grep -q libmysqlclient-dev; then
+        echo "libmysqlclient-dev is not installed. Installing..."
+        sudo apt update
+        sudo apt install libmysqlclient-dev --yes
+    fi
+fi
+
+# update Rust to the latest
+rustup update
+
+# install utilities
+cargo install cargo-generate-rpm
+cargo install cargo-machete

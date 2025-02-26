@@ -1,6 +1,7 @@
 // workbench.rs
 
-use log::trace;
+use tracing::trace;
+
 use wipac_datamove::ensure_minimum_usize;
 
 fn main() {

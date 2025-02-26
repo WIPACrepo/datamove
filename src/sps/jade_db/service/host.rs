@@ -1,8 +1,8 @@
 // host.rs
 
 use chrono::{NaiveDateTime, Utc};
-use log::{error, trace};
 use sqlx::MySqlPool;
+use tracing::{error, trace};
 
 use crate::sps::jade_db::repo::host::create as repo_create;
 use crate::sps::jade_db::repo::host::find_by_host_name as repo_find_by_host_name;

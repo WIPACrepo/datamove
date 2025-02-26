@@ -1,8 +1,9 @@
 // context.rs
 
-use log::info;
-use sqlx::MySqlPool;
 use std::fs;
+
+use sqlx::MySqlPool;
+use tracing::info;
 
 use crate::config::DatamoveConfiguration;
 

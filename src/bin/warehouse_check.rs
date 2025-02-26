@@ -51,7 +51,6 @@
 /// Files that do not pass verification can send the work unit to a
 /// quarantine directory along with a note of the file(s) that caused
 /// the work unit to be quarantined for further examination.
-use log::{error, info, trace, warn};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -59,6 +58,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+
+use tracing::{error, info, trace, warn};
 
 use wipac_datamove::adhoc::utils::next_file;
 

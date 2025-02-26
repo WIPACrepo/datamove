@@ -1,4 +1,4 @@
-jade began streaming to a new archival disk.
+datamove began streaming to a new archival disk.
 
 Host:         jade01
 Archive:      IceCube Disk Archive

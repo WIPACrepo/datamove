@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            SELECT jfp.jade_file_pair_uuid as jade_fi\n            FROM jade_map_disk_to_file_pair AS jmdtfp\n            LEFT JOIN jade_file_pair AS jfp\n            ON jfp.jade_file_pair_id = jmdtfp.jade_file_pair_id\n            WHERE jade_disk_id = ?\n            ORDER BY jade_file_pair_order\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jade_fi",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "1716c165bb7e199becfcf419905150029557b91dcfacf89d5e0041f10ce6f019"
+}

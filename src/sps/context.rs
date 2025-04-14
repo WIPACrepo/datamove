@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use sqlx::MySqlPool;
+use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use tracing::info;
 
 use crate::config::DatamoveConfiguration;
@@ -34,7 +34,13 @@ pub fn load_context() -> Context {
     let database_url = format!("mysql://{username}:{password}@{host}:{port}/{database_name}");
 
     // db: set up the database connection
-    let db_pool = MySqlPool::connect_lazy(&database_url)
+    // let db_pool = MySqlPool::connect_lazy(&database_url)
+    //     .expect("Unable to create MySqlPool to connect to the database");
+    let db_pool = MySqlPoolOptions::new()
+        .min_connections(15)
+        .max_connections(20)
+        .test_before_acquire(false)
+        .connect_lazy(&database_url)
         .expect("Unable to create MySqlPool to connect to the database");
 
     // hostname: determine the hostname running the process

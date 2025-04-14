@@ -9,8 +9,7 @@ use crate::sps::jade_db::repo::host::find_by_host_name as repo_find_by_host_name
 use crate::sps::jade_db::repo::host::MySqlJadeHost;
 use crate::sps::jade_db::utils::JadeDateNaive;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 #[derive(Clone)]
 pub struct JadeHost {
@@ -119,22 +118,20 @@ pub async fn find_by_host_name(pool: &MySqlPool, find_host_name: &str) -> Result
                 Ok(jade_host)
             } else {
                 // otherwise log the missing host as an error and return an Err Result
-                error!("Database table jade_host has no entry for host_name '{find_host_name}'.");
-                Err(format!(
+                let msg = format!(
                     "Database table jade_host has no entry for host_name '{find_host_name}'."
-                )
-                .into())
+                );
+                error!(msg);
+                Err(DatamoveError::Critical(msg))
             }
         }
         // whoops, something went wrong in the database layer, better log about that
         Err(e) => {
-            error!(
+            let msg = format!(
                 "Unable to read database table jade_host for host_name '{find_host_name}': {e}."
             );
-            Err(format!(
-                "Unable to read database table jade_host for host_name '{find_host_name}': {e}."
-            )
-            .into())
+            error!(msg);
+            Err(DatamoveError::Critical(msg))
         }
     }
 }

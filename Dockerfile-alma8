@@ -26,3 +26,4 @@ RUN dnf install -y \
     && dnf clean all
 COPY --from=build /app/target/release/disk_archiver /usr/local/bin/disk_archiver
 COPY --from=build /app/target/release/warehouse_check /usr/local/bin/warehouse_check
+COPY --from=build /app/target/release/workbench /usr/local/bin/workbench

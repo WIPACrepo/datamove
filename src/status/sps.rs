@@ -41,7 +41,7 @@ pub struct DiskArchiverWorkerStatus {
     pub inbox_count: u64,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Disk {
     pub status: DiskStatus,
 
@@ -119,7 +119,7 @@ impl TryFrom<JadeDisk> for Disk {
             archive: Some(value.disk_archive_uuid),
             available: None, // a disk from the database is already claimed (never available)
             label: Some(value.label),
-            serial: None, // TODO: need to add this!!
+            serial: Some(value.serial_number),
         })
     }
 }

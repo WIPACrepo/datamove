@@ -6,8 +6,7 @@ use std::path::Path;
 
 use sha2::{Digest, Sha512};
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::Result;
 
 /// TODO: write documentation comment
 pub fn compute_sha512(file_path: &Path) -> Result<String> {

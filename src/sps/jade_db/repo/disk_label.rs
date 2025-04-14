@@ -7,8 +7,7 @@ use sqlx::{FromRow, MySql, MySqlPool, Transaction};
 use crate::sps::jade_db::service::disk_label::JadeDiskLabel;
 use crate::sps::jade_db::utils::JadeDatePrimitive;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::Result;
 
 #[derive(Debug, FromRow)]
 pub struct MySqlJadeDiskLabel {

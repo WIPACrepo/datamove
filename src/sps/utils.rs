@@ -3,7 +3,7 @@
 pub mod crypto;
 pub mod lsblk;
 
-use std::cmp::max;
+use std::cmp::{max, Ordering};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -11,11 +11,10 @@ use std::process::Command;
 use std::time::SystemTime;
 
 use fs2::{free_space, total_space};
-use tracing::{error, info};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 /// TODO: write documentation comment
 pub fn count_uuid_labels(path_str: &str) -> Result<u64> {
@@ -23,7 +22,7 @@ pub fn count_uuid_labels(path_str: &str) -> Result<u64> {
     let path = Path::new(path_str);
     if !path.is_dir() {
         let msg = format!("{path_str} is not a directory");
-        return Err(msg.into());
+        return Err(DatamoveError::Other(msg.into()));
     }
     // let's count the UUIDs...
     let mut count = 0;
@@ -42,9 +41,10 @@ pub fn count_uuid_labels(path_str: &str) -> Result<u64> {
 
 /// TODO: write documentation comment
 pub fn create_directory(dir_path: &Path) -> Result<()> {
+    // TODO: why aren't we just calling this directly?
     match fs::create_dir_all(dir_path) {
         Ok(_) => Ok(()),
-        Err(e) => Err(format!("{e}").into()),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -80,7 +80,9 @@ pub fn get_file_count(directory: &str) -> Result<u64> {
     let dir_path = Path::new(directory);
     // ensure the provided path is a directory
     if !dir_path.is_dir() {
-        return Err("Provided path is not a directory".into());
+        return Err(DatamoveError::Other(
+            "Provided path is not a directory".into(),
+        ));
     }
     // initialize a counter for files
     let mut file_count = 0;
@@ -131,7 +133,9 @@ pub fn get_oldest_file_age_in_secs(directory: &str) -> Result<u64> {
     let dir_path = Path::new(directory);
     // ensure the provided path is a directory
     if !dir_path.is_dir() {
-        return Err("Provided path is not a directory".into());
+        return Err(DatamoveError::Other(
+            "Provided path is not a directory".into(),
+        ));
     }
     // get the current system time
     let now = SystemTime::now();
@@ -158,6 +162,51 @@ pub fn get_oldest_file_age_in_secs(directory: &str) -> Result<u64> {
     }
     // return the age of the oldest file to the caller
     Ok(oldest_age)
+}
+
+/// Determine the modification time of the oldest file in the provided directory.
+///
+/// This function scans the top-level of the provided directory and returns the modification
+/// timestamp (`SystemTime`) of the oldest file. It skips subdirectories and only considers
+/// regular files. If no files are found, it returns `None`.
+///
+/// # Arguments
+///
+/// * `directory` - A string slice representing the path to the directory to scan.
+///
+/// # Returns
+///
+/// Returns a `Result` containing:
+/// - `Ok(Some(SystemTime))` - The oldest modification time found.
+/// - `Ok(None)` - If no regular files are found.
+/// - `Err(Box<dyn Error>)` - If an error occurs accessing the directory or file metadata.
+pub fn get_oldest_file_date(directory: &str) -> Result<Option<SystemTime>> {
+    let dir_path = Path::new(directory);
+
+    if !dir_path.is_dir() {
+        return Err(DatamoveError::Other("Provided path is not a directory".into()));
+    }
+
+    let mut oldest: Option<SystemTime> = None;
+
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let metadata = entry.metadata()?;
+
+        if metadata.is_file() {
+            if let Ok(mtime) = metadata.modified() {
+                oldest = match oldest {
+                    Some(current_oldest) => match mtime.cmp(&current_oldest) {
+                        Ordering::Less => Some(mtime),
+                        _ => Some(current_oldest),
+                    },
+                    None => Some(mtime),
+                };
+            }
+        }
+    }
+
+    Ok(oldest)
 }
 
 /// TODO: write documentation comment
@@ -203,9 +252,11 @@ pub fn is_mount_point(path: &str) -> bool {
 
 /// TODO: write documentation comment
 pub fn is_writable_dir(path_str: &str) -> bool {
+    trace!("Testing writability of path: {}", path_str);
     // not a directory? then not a writable directory
     let path = Path::new(path_str);
     if !path.is_dir() {
+        trace!("Provided path {} is not a directory!", path_str);
         return false;
     }
     // create a canary file and write something to it
@@ -216,7 +267,9 @@ pub fn is_writable_dir(path_str: &str) -> bool {
         .open(&test_file)
         .and_then(|mut file| file.write_all(b"test"));
     // were we able to write something to it after all?
+    trace!("result: {:#?}", result);
     let writable = result.is_ok();
+    trace!("writable: {}", writable);
     // clean up the canary file (if it was created)
     let _ = fs::remove_file(test_file);
     // tell the caller what we discovered
@@ -313,6 +366,46 @@ mod tests {
         fs::remove_dir_all(temp_dir)?;
         // check that we got the correct result from our test
         assert_eq!(oldest_age, 90);
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_oldest_file_date() -> Result<()> {
+        let temp_dir = "/tmp/test_get_oldest_file_date";
+        fs::create_dir_all(temp_dir)?;
+
+        let now = SystemTime::now();
+
+        let create_file_with_age = |file_name: &str, age_in_secs: u64| -> Result<SystemTime> {
+            let file_path = Path::new(temp_dir).join(file_name);
+            File::create(&file_path)?;
+            let mtime = now - Duration::from_secs(age_in_secs);
+            let ft = FileTime::from_system_time(mtime);
+            filetime::set_file_times(&file_path, ft, ft)?;
+            Ok(mtime)
+        };
+
+        let _ = create_file_with_age("file1.txt", 30)?;
+        let _ = create_file_with_age("file2.txt", 60)?;
+        let expected_oldest = create_file_with_age("file3.txt", 90)?;
+
+        let oldest_mtime = get_oldest_file_date(temp_dir)?
+            .expect("Expected at least one file to determine oldest date");
+
+        fs::remove_dir_all(temp_dir)?;
+
+        // Allowing a few seconds of leeway due to potential filesystem timestamp rounding
+        let delta = oldest_mtime
+            .duration_since(expected_oldest)
+            .unwrap_or_else(|e| e.duration())
+            .as_secs();
+        assert!(
+            delta <= 2,
+            "Expected oldest time within 2s of {:?}, got {:?}",
+            expected_oldest,
+            oldest_mtime
+        );
+
         Ok(())
     }
 }

@@ -4,9 +4,6 @@ use chrono::{DateTime, NaiveDateTime};
 use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
 use time::Duration;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
-
 pub struct JadeDateNaive(NaiveDateTime);
 
 impl From<NaiveDateTime> for JadeDateNaive {
@@ -82,6 +79,7 @@ pub fn convert_naive_date_time_to_primitive_date_time(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Result;
     use sqlx::types::time::{Date, Time};
     use time::Month;
 

@@ -3,7 +3,7 @@
 // #![feature(trivial_bounds)]
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
+use std::{env, path::Path, sync::Arc};
 
 use axum::{routing::get, routing::post, Router};
 use tokio::{net::TcpListener, sync::Notify, try_join};
@@ -14,10 +14,18 @@ use tracing_subscriber::EnvFilter;
 use wipac_datamove::sps::{context::load_context, process::disk_archiver::DiskArchiver};
 use wipac_datamove::status::net::{get_status_disk_archiver, post_shutdown_disk_archiver};
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    // load the logging path
+    let log_path_env = std::env::var("LOG_PATH").expect("Expected environment variable: LOG_PATH");
+    let log_path = Path::new(&log_path_env);
+    // extract directory and file name
+    let log_dir = log_path.parent().expect("Failed to extract log directory");
+    let log_file = log_path
+        .file_name()
+        .expect("Failed to extract log filename");
     // set up log file rotation (daily)
-    let file_appender = rolling::daily("/mnt/data/jade/log", "disk_archiver.log");
+    let file_appender = rolling::daily(log_dir, log_file);
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     // initialize logging with both file and console output

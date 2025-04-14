@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport};
+use lettre::{transport::smtp::client::Tls, Message, SmtpTransport, Transport};
 use num_format::{Locale, ToFormattedString};
 use serde::Serialize;
 use tera::Result as TeraResult;
@@ -21,8 +21,7 @@ use crate::status::sps::{
     DiskStatus::{Available, Finished, InUse, NotMounted, NotUsable},
 };
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 pub const CLOSE_DISK_TEMPLATE: &str = "closeArchiveDisk.tera";
 pub const CREATE_DISK_TEMPLATE: &str = "createArchiveDisk.tera";
@@ -73,7 +72,7 @@ pub struct CapacityUpdate {
 }
 
 fn build_capacity_update(
-    disk_archiver: &DiskArchiver,
+    _disk_archiver: &DiskArchiver,
     archival_disk_map: &HashMap<String, Disk>,
 ) -> CapacityUpdate {
     // create some containers to hold the status strings
@@ -97,16 +96,12 @@ fn build_capacity_update(
             }
             InUse => {
                 // determine the disk archive the disk belongs to
-                let disk_archives = &disk_archiver.disk_archives;
-                let disk_archive_uuid = disk
+                let archive = disk
                     .archive
                     .clone()
-                    .expect("Disk missing disk_archive_uuid");
-                let disk_archive = disk_archives
-                    .for_uuid(&disk_archive_uuid)
-                    .expect("Disk has unknown disk archive");
+                    .unwrap_or("Unknown Archive".to_string());
                 // add the information to the In-Use paths
-                let info = format!("{} ID:{} [{}]", path, disk.id, &disk_archive.description);
+                let info = format!("{} ID:{} [{}]", path, disk.id, archive);
                 in_use_paths.push(info);
             }
             Finished => {
@@ -254,13 +249,11 @@ fn calculate_rate_bytes_sec(disk: &JadeDisk, size: i64) -> Result<i64> {
     if seconds < 1 {
         // no time travel allowed! https://www.youtube.com/watch?v=qAMoWEwK-4A
         let disk_id = disk.jade_disk_id;
-        error!(
+        let msg = format!(
             "Unable to determine duration of Disk ID:{disk_id}; was {seconds} seconds (must be >0)"
         );
-        return Err(format!(
-            "Unable to determine duration of Disk ID:{disk_id}; was {seconds} seconds (must be >0)"
-        )
-        .into());
+        error!(msg);
+        return Err(DatamoveError::Other(msg.into()));
     }
 
     // return to caller: (how much we wrote / how long it took us to write it)
@@ -315,10 +308,10 @@ pub async fn send_email_disk_full(
         enabled,
         from,
         host,
-        password,
+        password: _,
         port,
         reply_to,
-        username,
+        username: _,
     } = &disk_archiver.context.config.email_configuration;
     // if email is disabled, don't send any email
     if !enabled {
@@ -354,11 +347,15 @@ pub async fn send_email_disk_full(
     let email_body = build_disk_closed_body(disk_archiver, label_path, disk).await;
     let message = email.body(email_body)?;
     // create an SmtpTransport to use for sending the message
-    let creds = Credentials::new(username.to_owned(), password.to_owned());
-    let mailer = SmtpTransport::relay(host)
-        .unwrap()
-        .credentials(creds)
+    // let creds = Credentials::new(username.to_owned(), password.to_owned());
+    // let mailer = SmtpTransport::relay(host)
+    //     .unwrap()
+    //     .credentials(creds)
+    //     .port(*port)
+    //     .build();
+    let mailer = SmtpTransport::builder_dangerous(host)
         .port(*port)
+        .tls(Tls::None)
         .build();
     // You've Got Mail!
     info!("Sending {DISK_FULL_SUBJECT} message.");
@@ -378,10 +375,10 @@ pub async fn send_email_disk_started(
         enabled,
         from,
         host,
-        password,
+        password: _,
         port,
         reply_to,
-        username,
+        username: _,
     } = &disk_archiver.context.config.email_configuration;
     // if email is disabled, don't send any email
     if !enabled {
@@ -420,11 +417,15 @@ pub async fn send_email_disk_started(
     let email_body = build_disk_started_body(disk_archiver, label_path, disk).await;
     let message = email.body(email_body)?;
     // create an SmtpTransport to use for sending the message
-    let creds = Credentials::new(username.to_owned(), password.to_owned());
-    let mailer = SmtpTransport::relay(host)
-        .unwrap()
-        .credentials(creds)
+    // let creds = Credentials::new(username.to_owned(), password.to_owned());
+    // let mailer = SmtpTransport::relay(host)
+    //     .unwrap()
+    //     .credentials(creds)
+    //     .port(*port)
+    //     .build();
+    let mailer = SmtpTransport::builder_dangerous(host)
         .port(*port)
+        .tls(Tls::None)
         .build();
     // You've Got Mail!
     info!("Sending Streaming Archive Started message.");

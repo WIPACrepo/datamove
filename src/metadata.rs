@@ -69,9 +69,9 @@ pub struct ArchivalDiskFile {
     #[serde(rename = "binarySize")]
     pub binary_size: i64,
 
-    #[serde(rename = "dataStreamId")]
-    pub data_stream_id: i64,
-
+    // TODO: This is always NULL in the JADE DB; no point to record it
+    // #[serde(rename = "dataStreamId")]
+    // pub data_stream_id: i64,
     #[serde(rename = "dataStreamUuid")]
     pub data_stream_uuid: String,
 

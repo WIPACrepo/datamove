@@ -11,8 +11,7 @@ use crate::sps::jade_db::repo::disk_label::get_next_label as repo_get_next_label
 use crate::sps::jade_db::repo::disk_label::MySqlJadeDiskLabel;
 use crate::sps::jade_db::utils::convert_primitive_date_time_to_naive_date_time as to_naive_date_time;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 #[derive(Clone)]
 pub struct JadeDiskLabel {
@@ -70,16 +69,16 @@ pub async fn find_by_id(pool: &MySqlPool, jade_disk_label_id: i64) -> Result<Jad
                 let msg = format!(
                     "Database table jade_disk_label has no entry for id '{jade_disk_label_id}'."
                 );
-                error!("{msg}");
-                Err(msg.into())
+                error!(msg);
+                Err(DatamoveError::Critical(msg))
             }
         }
         Err(e) => {
             let msg = format!(
                 "Unable to read database table jade_disk_label for id '{jade_disk_label_id}': {e}."
             );
-            error!("{msg}");
-            Err(msg.into())
+            error!(msg);
+            Err(DatamoveError::Critical(msg))
         }
     }
 }

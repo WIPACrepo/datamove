@@ -5,12 +5,12 @@ use sqlx::types::time::PrimitiveDateTime;
 use sqlx::MySqlPool;
 use tracing::error;
 
+use crate::sps::jade_db::repo::file_pair::find_by_id as repo_find_by_id;
 use crate::sps::jade_db::repo::file_pair::find_by_uuid as repo_find_by_uuid;
 use crate::sps::jade_db::repo::file_pair::MySqlJadeFilePair;
 use crate::sps::jade_db::utils::JadeDateNaive;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 #[derive(Clone)]
 pub struct JadeFilePair {
@@ -92,6 +92,32 @@ impl From<MySqlJadeFilePair> for JadeFilePair {
     }
 }
 
+pub async fn find_by_id(pool: &MySqlPool, find_id: i64) -> Result<JadeFilePair> {
+    // try to locate the file pair by uuid in the database
+    match repo_find_by_id(pool, find_id).await {
+        // if we got a result back from the database
+        Ok(maybe_file_pair) => {
+            if let Some(file_pair) = maybe_file_pair {
+                // convert it to a service layer JadeFilePair and return it to the caller
+                let jade_file_pair: JadeFilePair = file_pair.into();
+                Ok(jade_file_pair)
+            } else {
+                // otherwise log the missing file pair as an error and return an Err Result
+                let msg = format!("Database table jade_file_pair has no entry for id '{find_id}'.");
+                error!(msg);
+                Err(DatamoveError::Critical(msg))
+            }
+        }
+        // whoops, something went wrong in the database layer, better log about that
+        Err(e) => {
+            let msg =
+                format!("Unable to read database table jade_file_pair for id '{find_id}': {e}.");
+            error!(msg);
+            Err(DatamoveError::Critical(msg))
+        }
+    }
+}
+
 pub async fn find_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<JadeFilePair> {
     // try to locate the file pair by uuid in the database
     match repo_find_by_uuid(pool, find_uuid).await {
@@ -103,20 +129,19 @@ pub async fn find_by_uuid(pool: &MySqlPool, find_uuid: &str) -> Result<JadeFileP
                 Ok(jade_file_pair)
             } else {
                 // otherwise log the missing file pair as an error and return an Err Result
-                error!("Database table jade_file_pair has no entry for uuid '{find_uuid}'.");
-                Err(
-                    format!("Database table jade_file_pair has no entry for uuid '{find_uuid}'.")
-                        .into(),
-                )
+                let msg =
+                    format!("Database table jade_file_pair has no entry for uuid '{find_uuid}'.");
+                error!(msg);
+                Err(DatamoveError::Critical(msg))
             }
         }
         // whoops, something went wrong in the database layer, better log about that
         Err(e) => {
-            error!("Unable to read database table jade_file_pair for uuid '{find_uuid}': {e}.");
-            Err(format!(
+            let msg = format!(
                 "Unable to read database table jade_file_pair for uuid '{find_uuid}': {e}."
-            )
-            .into())
+            );
+            error!(msg);
+            Err(DatamoveError::Critical(msg))
         }
     }
 }

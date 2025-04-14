@@ -1,17 +1,20 @@
 // disk.rs
 
-use chrono::NaiveDateTime;
+use std::collections::HashSet;
+use std::time::SystemTime;
+
+use chrono::{DateTime, NaiveDateTime, Utc};
 use num_traits::cast::ToPrimitive;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, MySql, MySqlPool, Transaction};
-use std::collections::HashSet;
 use time::OffsetDateTime;
+use tracing::{info, trace};
 
+use crate::sps::jade_db::repo::file_pair::MySqlJadeFilePair;
 use crate::sps::jade_db::service::disk::JadeDisk;
 use crate::sps::jade_db::utils::JadeDatePrimitive;
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::{DatamoveError, Result};
 
 #[derive(Debug, FromRow)]
 pub struct MySqlJadeDisk {
@@ -70,6 +73,10 @@ pub async fn add_file_pair(
     jade_disk_id: i64,
     jade_file_pair_id: i64,
 ) -> Result<()> {
+    info!(
+        "add_file_pair(): jade_disk_id={} jade_file_pair_id={}",
+        jade_disk_id, jade_file_pair_id
+    );
     // create a transaction to update the disk contents atomically
     let mut tx: Transaction<MySql> = pool.begin().await?;
     // check if the mapping already exists
@@ -123,6 +130,11 @@ pub async fn add_file_pair(
     // commit the transaction to the database
     tx.commit().await?;
     // tell the caller that we succeeded
+    trace!(
+        "Done -- add_file_pair(): jade_disk_id={} jade_file_pair_id={}",
+        jade_disk_id,
+        jade_file_pair_id
+    );
     Ok(())
 }
 
@@ -206,6 +218,46 @@ pub async fn create(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> 
     Ok(jade_disk_id)
 }
 
+pub async fn find_archived_file_pair_ids(pool: &MySqlPool, jade_disk_id: i64) -> Result<Vec<i64>> {
+    let jade_file_pair_ids = sqlx::query_scalar!(
+        r#"
+            SELECT jade_file_pair_id
+            FROM jade_map_disk_to_file_pair
+            WHERE jade_disk_id = ?
+            ORDER BY jade_file_pair_order
+        "#,
+        jade_disk_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(jade_file_pair_ids)
+}
+
+pub async fn find_archived_file_pair_uuids(
+    pool: &MySqlPool,
+    jade_disk_id: i64,
+) -> Result<Vec<String>> {
+    let jade_file_pair_uuids = sqlx::query_scalar!(
+        r#"
+            SELECT jfp.jade_file_pair_uuid as jade_fi
+            FROM jade_map_disk_to_file_pair AS jmdtfp
+            LEFT JOIN jade_file_pair AS jfp
+            ON jfp.jade_file_pair_id = jmdtfp.jade_file_pair_id
+            WHERE jade_disk_id = ?
+            ORDER BY jade_file_pair_order
+        "#,
+        jade_disk_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // remove all the NULL values (note: column is always populated in practice anyway)
+    let jade_file_pair_uuids: Vec<String> = jade_file_pair_uuids.into_iter().flatten().collect();
+
+    Ok(jade_file_pair_uuids)
+}
+
 pub async fn find_by_id(pool: &MySqlPool, jade_disk_id: i64) -> Result<Option<MySqlJadeDisk>> {
     let result = sqlx::query_as!(
         MySqlJadeDisk,
@@ -230,6 +282,40 @@ pub async fn find_by_uuid(pool: &MySqlPool, uuid: &str) -> Result<Option<MySqlJa
     Ok(result)
 }
 
+/// find if a file pair is archived to a good archive X, copy Y disk
+pub async fn find_file_pair(
+    pool: &MySqlPool,
+    jade_host_id: i64,
+    disk_archive_uuid: &str,
+    copy_id: u64,
+    jade_file_pair_id: i64,
+) -> Result<Option<MySqlJadeFilePair>> {
+    let result = sqlx::query_as!(
+        MySqlJadeFilePair,
+        r#"
+            SELECT jfp.*
+            FROM jade_file_pair AS jfp
+            LEFT JOIN jade_map_disk_to_file_pair AS jmdtfp
+            ON jfp.jade_file_pair_id = jmdtfp.jade_file_pair_id
+            LEFT JOIN jade_disk AS jd
+            ON jd.jade_disk_id = jmdtfp.jade_disk_id
+            WHERE jd.bad = false
+            AND jfp.jade_file_pair_id = ?
+            AND jd.jade_host_id = ?
+            AND jd.disk_archive_uuid = ?
+            AND jd.copy_id = ?
+        "#,
+        jade_file_pair_id,
+        jade_host_id,
+        disk_archive_uuid,
+        copy_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result)
+}
+
 /// find an open disk for archive X, copy Y
 pub async fn find_open(
     pool: &MySqlPool,
@@ -237,16 +323,23 @@ pub async fn find_open(
     disk_archive_uuid: &str,
     copy_id: i32,
 ) -> Result<Option<MySqlJadeDisk>> {
+    trace!(
+        "find_open() Host:{} DiskArchive:{} Copy:{}",
+        jade_host_id,
+        disk_archive_uuid,
+        copy_id
+    );
+    trace!("Database connections in use: {}", pool.size());
     let result = sqlx::query_as!(
         MySqlJadeDisk,
         r#"
             SELECT *
             FROM jade_disk
             WHERE bad = false
-                AND closed = false
-                AND copy_id = ?
-                AND jade_host_id = ?
-                AND disk_archive_uuid = ?
+              AND closed = false
+              AND copy_id = ?
+              AND jade_host_id = ?
+              AND disk_archive_uuid = ?
         "#,
         copy_id,
         jade_host_id,
@@ -255,6 +348,15 @@ pub async fn find_open(
     .fetch_optional(pool)
     .await?;
 
+    // tell the caller about the open disk we found
+    trace!(
+        "find_open() Host:{} DiskArchive:{} Copy:{} -- Found:{}",
+        jade_host_id,
+        disk_archive_uuid,
+        copy_id,
+        result.is_some()
+    );
+    trace!("Database connections in use: {}", pool.size());
     Ok(result)
 }
 
@@ -273,28 +375,73 @@ pub async fn get_num_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<i
     Ok(result.num_files)
 }
 
+// TODO: Remove this
+// pub async fn get_removable_files(
+//     pool: &MySqlPool,
+//     loaded_disk_ids: &Vec<i64>,
+//     required_copies: u64,
+// ) -> Result<HashSet<String>> {
+//     // if no disks are loaded, return an empty set
+//     if loaded_disk_ids.is_empty() {
+//         return Ok(HashSet::new());
+//     }
+//     trace!("loaded_disk_ids: {loaded_disk_ids:?}");
+//     // create placeholders; 4 ids = ?,?,?,?
+//     let placeholders = loaded_disk_ids
+//         .iter()
+//         .map(|_| "?")
+//         .collect::<Vec<_>>()
+//         .join(", ");
+//     // create the query text to find files that are sufficiently archived
+//     let query_string = format!(
+//         "WITH good_disks AS (
+//             SELECT jade_disk_id
+//             FROM jade_disk
+//             WHERE closed = 1 AND bad = 0 AND on_hold = 0
+//             AND jade_disk_id IN ({})
+//         ),
+//         file_copy_counts AS (
+//             SELECT jfp.jade_file_pair_uuid, COUNT(*) AS copy_count
+//             FROM jade_map_disk_to_file_pair jmdfp
+//             JOIN good_disks gd ON jmdfp.jade_disk_id = gd.jade_disk_id
+//             JOIN jade_file_pair jfp ON jmdfp.jade_file_pair_id = jfp.jade_file_pair_id
+//             GROUP BY jfp.jade_file_pair_uuid
+//         )
+//         SELECT jade_file_pair_uuid
+//         FROM file_copy_counts
+//         WHERE copy_count >= ?;",
+//         placeholders
+//     );
+//     // create the query object to run against the database
+//     let mut query = sqlx::query_scalar(&query_string);
+//     // bind the disk ids to the placeholders we created dynamically
+//     for id in loaded_disk_ids {
+//         query = query.bind(id);
+//     }
+//     // bind the required number of copies to the final placeholder
+//     query = query.bind(required_copies);
+//     // get the list of jade_file_pair_uuid values
+//     let jade_file_pair_uuids: Vec<String> = query.fetch_all(pool).await?;
+//     // send the list of UUIDs back to the caller in a HashSet
+//     Ok(jade_file_pair_uuids.into_iter().collect())
+// }
+
 pub async fn get_removable_files(
     pool: &MySqlPool,
-    loaded_disk_ids: &Vec<i64>,
+    cache_date: SystemTime,
     required_copies: u64,
 ) -> Result<HashSet<String>> {
-    // if no disks are loaded, return an empty set
-    if loaded_disk_ids.is_empty() {
-        return Ok(HashSet::new());
-    }
-    // create placeholders; 4 ids = ?,?,?,?
-    let placeholders = loaded_disk_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
-    // create the query text to find files that are sufficiently archived
-    let query_string = format!(
+    // determine the date of the earliest file in the cache
+    let earliest_file: DateTime<Utc> = cache_date.into();
+    // query the database to determine the files ready to be deleted
+    let jade_file_pair_uuids: Vec<String> = sqlx::query_scalar(
         "WITH good_disks AS (
             SELECT jade_disk_id
             FROM jade_disk
-            WHERE closed = 1 AND bad = 0 AND on_hold = 0
-            AND jade_disk_id IN ({})
+            WHERE closed = 1
+              AND bad = 0
+              AND on_hold = 0
+              AND date_created >= DATE_SUB(?, INTERVAL 30 DAY)
         ),
         file_copy_counts AS (
             SELECT jfp.jade_file_pair_uuid, COUNT(*) AS copy_count
@@ -305,19 +452,12 @@ pub async fn get_removable_files(
         )
         SELECT jade_file_pair_uuid
         FROM file_copy_counts
-        WHERE copy_count >= ?;",
-        placeholders
-    );
-    // create the query object to run against the database
-    let mut query = sqlx::query_scalar(&query_string);
-    // bind the disk ids to the placeholders we created dynamically
-    for id in loaded_disk_ids {
-        query = query.bind(id);
-    }
-    // bind the required number of copies to the final placeholder
-    query = query.bind(required_copies);
-    // get the list of jade_file_pair_uuid values
-    let jade_file_pair_uuids: Vec<String> = query.fetch_all(pool).await?;
+        WHERE copy_count >= ?",
+    )
+    .bind(earliest_file)
+    .bind(required_copies)
+    .fetch_all(pool)
+    .await?;
     // send the list of UUIDs back to the caller in a HashSet
     Ok(jade_file_pair_uuids.into_iter().collect())
 }
@@ -348,13 +488,13 @@ pub async fn get_serial_number_age_in_secs(
             let past_offset = latest_use.assume_utc();
             let duration = now - past_offset;
             let seconds = duration.whole_seconds();
-            // if somebody went 88 miles an hour...
+            // if somebody went 88 miles an hour... https://www.youtube.com/watch?v=JFT7hNhop7w
             if seconds < 0 {
                 let msg = format!(
                     "Serial Number:'{}' was used in the future!? (Age:{}s)",
                     serial_number, seconds
                 );
-                return Err(msg.into());
+                return Err(DatamoveError::Critical(msg));
             }
             // otherwise, turn it into a u32
             Ok(Some(seconds as u32))
@@ -390,6 +530,14 @@ pub async fn get_size_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<
 }
 
 pub async fn save(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {
+    trace!(
+        "save(): jade_disk_id={} closed={:?}",
+        jade_disk.jade_disk_id,
+        jade_disk.closed
+    );
+    // create a transaction to update the disk atomically
+    let mut tx: Transaction<MySql> = pool.begin().await?;
+    // run the update query
     let rows_affected = sqlx::query!(
         r#"
             UPDATE jade_disk
@@ -427,10 +575,12 @@ pub async fn save(pool: &MySqlPool, jade_disk: &MySqlJadeDisk) -> Result<u64> {
         jade_disk.hardware_metadata,
         jade_disk.jade_disk_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
-
+    // commit the transaction to the database
+    tx.commit().await?;
+    // tell the caller that we succeeded
     Ok(rows_affected)
 }
 

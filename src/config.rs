@@ -5,8 +5,7 @@ use lettre::{message::Mailbox, Address};
 use serde::{Deserialize, Serialize};
 use std::{fs::File, str::FromStr};
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use crate::error::Result;
 
 //
 // datamove.toml
@@ -54,6 +53,7 @@ pub struct SpsDiskArchiverConfig {
     pub tera_template_glob: String,
     pub work_cycle_sleep_seconds: u64,
     pub work_dir: String,
+    pub work_limit_break: u64,
 }
 
 //
@@ -108,10 +108,9 @@ pub enum ContactRole {
 
 pub fn load_contacts(path: &str) -> Result<Contacts> {
     // open the contacts JSON configuration file
-    let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+    let file = File::open(path)?;
     // deserialize the JSON into the Contacts structure
-    let contacts: Contacts =
-        serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
+    let contacts: Contacts = serde_json::from_reader(&file)?;
     // return the Contacts structure to the caller
     Ok(contacts)
 }
@@ -242,10 +241,9 @@ impl<'a> IntoIterator for &'a DataStreams {
 
 pub fn load_data_streams(path: &str) -> Result<DataStreamsConfig> {
     // open the disk archives JSON configuration file
-    let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+    let file = File::open(path)?;
     // deserialize the JSON into the DataStreams structure
-    let data_streams: DataStreamsConfig =
-        serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
+    let data_streams: DataStreamsConfig = serde_json::from_reader(&file)?;
     // return the DataStreams structure to the caller
     Ok(data_streams)
 }
@@ -307,10 +305,9 @@ impl<'a> IntoIterator for &'a DiskArchives {
 
 pub fn load_disk_archives(path: &str) -> Result<DiskArchivesConfig> {
     // open the disk archives JSON configuration file
-    let file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+    let file = File::open(path)?;
     // deserialize the JSON into the DiskArchives structure
-    let disk_archives: DiskArchivesConfig =
-        serde_json::from_reader(&file).map_err(|e| format!("Failed to deserialize JSON: {}", e))?;
+    let disk_archives: DiskArchivesConfig = serde_json::from_reader(&file)?;
     // return the DiskArchives structure to the caller
     Ok(disk_archives)
 }
@@ -332,6 +329,35 @@ mod tests {
     fn test_deserialize_datastreams_json() -> Result<()> {
         let data_streams_json_text = include_str!("../tests/data/test_dataStreams.json");
         let _data_streams: DataStreamsConfig = serde_json::from_str(&data_streams_json_text)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_diskarchives_json() -> Result<()> {
+        let disk_archives_json_text = include_str!("../tests/data/test_diskArchives.json");
+        let _disk_archives: DiskArchivesConfig = serde_json::from_str(&disk_archives_json_text)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_disk_archives_for_uuid_icecube() -> Result<()> {
+        let disk_archives_json_text = include_str!("../tests/data/test_diskArchives.json");
+        let disk_archives_config: DiskArchivesConfig =
+            serde_json::from_str(&disk_archives_json_text)?;
+        let disk_archives = DiskArchives(disk_archives_config.disk_archives);
+        let icecube_disk_archive = disk_archives.for_uuid("e09e65f7-37d1-45a7-9553-723a582504ef");
+        assert!(icecube_disk_archive.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn test_disk_archives_for_uuid_ara() -> Result<()> {
+        let disk_archives_json_text = include_str!("../tests/data/test_diskArchives.json");
+        let disk_archives_config: DiskArchivesConfig =
+            serde_json::from_str(&disk_archives_json_text)?;
+        let disk_archives = DiskArchives(disk_archives_config.disk_archives);
+        let ara_disk_archive = disk_archives.for_uuid("aaae758d-6bd4-483e-a029-f1690897baa2");
+        assert!(ara_disk_archive.is_none());
         Ok(())
     }
 }

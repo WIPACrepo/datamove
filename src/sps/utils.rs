@@ -184,7 +184,9 @@ pub fn get_oldest_file_date(directory: &str) -> Result<Option<SystemTime>> {
     let dir_path = Path::new(directory);
 
     if !dir_path.is_dir() {
-        return Err(DatamoveError::Other("Provided path is not a directory".into()));
+        return Err(DatamoveError::Other(
+            "Provided path is not a directory".into(),
+        ));
     }
 
     let mut oldest: Option<SystemTime> = None;

@@ -45,7 +45,7 @@ use crate::sps::utils::{
     get_oldest_file_age_in_secs, get_oldest_file_date, is_mount_point, is_writable_dir, move_file,
     touch_label,
 };
-use crate::status::sps::{Disk, DiskArchiverStatus, DiskStatus};
+use crate::status::sps::{Disk, DiskArchiverComponentStatus, DiskArchiverStatus, DiskStatus};
 use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
 
 use crate::error::{DatamoveError, Result};
@@ -56,6 +56,7 @@ pub const CLOSE_SEMAPHORE_NAME: &str = "close.me";
 pub const MAX_TILT_COUNT: i32 = 10;
 
 pub type SharedFlag = Arc<Mutex<bool>>;
+pub type SharedStatus = Arc<Mutex<DiskArchiverComponentStatus>>;
 
 #[derive(Clone)]
 pub struct DiskArchiver {
@@ -65,6 +66,7 @@ pub struct DiskArchiver {
     pub disk_archives: DiskArchives,
     pub host: JadeHost,
     pub shutdown: SharedFlag,
+    pub status: SharedStatus,
     pub tera: Tera,
 }
 
@@ -100,6 +102,7 @@ impl DiskArchiver {
             disk_archives: DiskArchives(disk_archives),
             host,
             shutdown: Arc::new(Mutex::new(false)),
+            status: Arc::new(Mutex::new(DiskArchiverComponentStatus::Ok)),
             tera,
         }
     }
@@ -127,6 +130,7 @@ impl DiskArchiver {
                 error!("Error detected during do_work_cycle(): {e}");
                 error!("Will shut down the DiskArchiver.");
                 *self.shutdown.lock().unwrap() = true;
+                *self.status.lock().unwrap() = DiskArchiverComponentStatus::FullStop;
                 break;
             }
             // sleep until the next work cycle
@@ -758,6 +762,11 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
 
     let archival_disks = build_archival_disks_status(disk_archiver).await;
 
+    let status = match &*disk_archiver.status.lock().unwrap() {
+        DiskArchiverComponentStatus::FullStop => Some("FULL_STOP".to_string()),
+        DiskArchiverComponentStatus::Ok => Some("OK".to_string()),
+    };
+
     DiskArchiverStatus {
         workers: vec![DiskArchiverWorkerStatus {
             archival_disks,
@@ -767,7 +776,7 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
         inbox_age,
         problem_file_count,
         message: None,
-        status: Some("OK".to_string()),
+        status,
     }
 }
 
@@ -1112,9 +1121,12 @@ pub async fn ensure_file_pair_metadata(
         let device_root = &disk.device_path;
         let hex_1 = &jade_file_pair_uuid[0..1];
         let hex_2 = &jade_file_pair_uuid[1..2];
-        let dir_path = format!("{}/metadata/{}/{}", device_root, hex_1, hex_2);
+        let file_path = format!(
+            "{}/metadata/{}/{}/{}.json",
+            device_root, hex_1, hex_2, jade_file_pair_uuid
+        );
         // if the file already exists, skip it
-        if fs::exists(dir_path)? {
+        if fs::exists(file_path)? {
             continue;
         }
         // whoops, we missed one; so let's generate it

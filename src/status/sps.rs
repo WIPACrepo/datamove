@@ -11,6 +11,15 @@ pub const NO_ID: i64 = 0;
 // -- disk_archiver ---------------------------------------------------------
 // --------------------------------------------------------------------------
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum DiskArchiverComponentStatus {
+    #[serde(rename = "FULL_STOP")]
+    FullStop,
+
+    #[serde(rename = "OK")]
+    Ok,
+}
+
 /// provide this struct to jade for its `jade status` command
 #[derive(Deserialize, Serialize)]
 pub struct DiskArchiverStatus {

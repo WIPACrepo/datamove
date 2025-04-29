@@ -10,20 +10,26 @@
 .github
 # .sqlx
 bin
+# deploy
 doc
+# etc
 image
 sql
 # src
 target
 tests
 tools
+
 .dockerignore
 .gitignore
 # Cargo.lock
 # Cargo.toml
 datamove.code-workspace
-datamove.example.toml
 datamove.toml
 Dockerfile
+Dockerfile-alma8
+Dockerfile-rpm
 NOTES.md
 # README.md
+
+*.rpm

@@ -1085,6 +1085,12 @@ pub async fn do_work_cycle(disk_archiver: &DiskArchiver) -> Result<()> {
         error!("No further work will be performed until the error is handled.");
         return Err(e);
     }
+    // make sure any orphan files in working directory are reclaimed
+    if let Err(e) = reclaim_abandoned_work(disk_archiver).await {
+        error!("Error occured reclaiming abandoned work: {e}");
+        error!("No further work will be performed until the error is handled.");
+        return Err(e);
+    }
     // archive files to archival disks
     if let Err(e) = archive_file_pairs_to_archives(disk_archiver).await {
         error!("Error occured archiving files to archival disks: {e}");
@@ -1449,6 +1455,42 @@ fn read_disk_labels(path: &Path) -> Result<Vec<String>> {
 
     // return the list of disk label filenames to the caller
     Ok(disk_labels)
+}
+
+// move any files from the work directory to the inbox directory
+async fn reclaim_abandoned_work(disk_archiver: &DiskArchiver) -> Result<()> {
+    // if we're not configured to reclaim work, just bail out
+    if !disk_archiver.context.config.sps_disk_archiver.reclaim_work {
+        return Ok(());
+    }
+    // otherwise, we need to move everything from work_dir -> inbox_dir
+    let inbox_dir = &disk_archiver.context.config.sps_disk_archiver.inbox_dir;
+    let work_dir = &disk_archiver.context.config.sps_disk_archiver.work_dir;
+    info!("Moving abandoned work from {work_dir} to {inbox_dir}.");
+    let inbox_path = Path::new(inbox_dir);
+    // read all the files in the work directory
+    let mut rd = tokio::fs::read_dir(work_dir).await?;
+    while let Some(entry) = rd.next_entry().await? {
+        // get the next file from the work directory
+        let work_file: PathBuf = entry.path();
+        // if this isn't a file, just skip it
+        if !work_file.is_file() {
+            continue;
+        }
+        // get the name of the file in the work directory
+        let file_name = work_file.file_name().unwrap();
+        // compute the inbox directory path of the file
+        let inbox_file = inbox_path.join(file_name);
+        // log about what we're doing
+        info!("Moving file {:?} to {:?}", work_file, inbox_file);
+        // attempt to move the file, and log if we fail
+        if let Err(e) = tokio::fs::rename(&work_file, &inbox_file).await {
+            error!("Failed to move {:?} to {:?}: {}", work_file, inbox_file, e);
+        }
+    }
+    // tell the caller that everything went according to plan
+    info!("Finished reclaiming abandoned work.");
+    Ok(())
 }
 
 fn remove_uuids_from_cache(cache_path: &Path, delete_set: &HashSet<String>) -> std::io::Result<()> {

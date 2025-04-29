@@ -49,6 +49,7 @@ pub struct SpsDiskArchiverConfig {
     pub minimum_disk_age_seconds: u32,
     pub outbox_dir: String,
     pub problem_files_dir: String,
+    pub reclaim_work: bool,
     pub status_port: u16,
     pub tera_template_glob: String,
     pub work_cycle_sleep_seconds: u64,

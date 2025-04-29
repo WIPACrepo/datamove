@@ -58,6 +58,19 @@ outbox_dir = "/mnt/data/jade/disk_cache"
 # place files that it is having a difficult time processing.
 problem_files_dir = "/mnt/data/jade/problem_files/disk-archiver"
 
+# A flag to indicate if the component should move any work it finds in
+# the work directory to the inbox directory before starting to process
+# the work in the inbox directory.
+#
+# Some work may have been left in a half-complete state. By setting this
+# flag to 'true', the component will 'reclaim' this abandoned work by
+# moving it back to the inbox directory.
+#
+# If there is a single instance of the component working on files,
+# it is best to leave this set to 'true'. If there are multiple components
+# using the same work directory, this should be set to 'false'.
+reclaim_work = true
+
 # The port used by the component to listen and respond to requests
 # for status information.
 status_port = 13002

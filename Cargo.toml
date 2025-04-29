@@ -29,7 +29,7 @@ tera = "1.20.0"
 thiserror = "2.0.12"
 time = "0.3.41"
 tokio = { version = "1.44.2", features = ["full"] }
-toml = "0.8.21"
+toml = "0.8.22"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
@@ -39,7 +39,7 @@ uuid = { version = "1.16.0", features = ["v4"] }
 filetime = "0.2.25"
 
 [package.metadata.generate-rpm]
-release = "29"
+release = "33.el8"
 name = "datamove"
 license = "UNLICENSED"
 assets = [

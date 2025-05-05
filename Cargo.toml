@@ -3,16 +3,16 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.2.2"
+version = "0.3.0"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
 publish = false
 
 [dependencies]
-axum = { version = "0.8.3", features = ["macros"] }
+axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["erased-json"] }
-chrono = { version = "0.4.40", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 env_logger = "0.11.8"
 fs2 = "0.4.3"
 hostname = "0.4.1"
@@ -23,7 +23,7 @@ rand = "0.9.1"
 regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-sha2 = "0.10.8"
+sha2 = "0.10.9"
 sqlx = { version = "0.8.5", features = ["bigdecimal", "chrono", "mysql", "runtime-tokio", "time"] }
 tera = "1.20.0"
 thiserror = "2.0.12"
@@ -39,7 +39,7 @@ uuid = { version = "1.16.0", features = ["v4"] }
 filetime = "0.2.25"
 
 [package.metadata.generate-rpm]
-release = "33.el8"
+release = "1.el8"
 name = "datamove"
 license = "UNLICENSED"
 assets = [

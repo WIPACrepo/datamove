@@ -39,6 +39,7 @@ use crate::sps::jade_db::service::file_pair::JadeFilePair;
 use crate::sps::jade_db::service::host::ensure_host;
 use crate::sps::jade_db::service::host::JadeHost;
 use crate::sps::utils::crypto::compute_sha512;
+use crate::sps::utils::hardware_metadata::get_hardware_metadata;
 use crate::sps::utils::lsblk::get_serial_for_mountpoint;
 use crate::sps::utils::{
     count_uuid_labels, create_directory, flush_to_disk, get_file_count, get_free_space,
@@ -128,8 +129,6 @@ impl DiskArchiver {
             // perform the work of the disk archiver
             if let Err(e) = do_work_cycle(self).await {
                 error!("Error detected during do_work_cycle(): {e}");
-                error!("Will shut down the DiskArchiver.");
-                *self.shutdown.lock().unwrap() = true;
                 *self.status.lock().unwrap() = DiskArchiverComponentStatus::FullStop;
                 break;
             }
@@ -146,8 +145,8 @@ impl DiskArchiver {
             };
         }
 
-        // log about the fact that we received a shutdown command
-        info!("Initiating graceful shutdown of DiskArchiver.");
+        // log about the fact that we exited the main work loop
+        info!("DiskArchiver work loop ends.");
     }
 
     pub fn request_shutdown(&self) {
@@ -941,6 +940,15 @@ async fn create_archive_copy(
     let capacity = get_free_space(&disk_path)?;
     let disk_archive_uuid = &disk_archive.uuid;
     let jade_host_id = disk_archiver.host.jade_host_id;
+    let hardware_metadata = match get_hardware_metadata(&disk_path) {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            error!("Unable to compute hardware_metadata during create_archive_copy(): {e}");
+            // so what I told you is true, from a certain point of view
+            // https://www.youtube.com/watch?v=o7A6aV-eTNk
+            "{\"metadata\":[]}".to_string()
+        }
+    };
     let now: NaiveDateTime = Utc::now().naive_utc();
     let jade_disk_id = create_disk(
         pool,
@@ -960,7 +968,7 @@ async fn create_archive_copy(
             jade_host_id,
             disk_archive_uuid: disk_archive_uuid.clone(),
             serial_number,
-            hardware_metadata: "".to_string(),
+            hardware_metadata,
         },
     )
     .await?;

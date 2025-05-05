@@ -1,6 +1,7 @@
 // utils.rs
 
 pub mod crypto;
+pub mod hardware_metadata;
 pub mod lsblk;
 
 use std::cmp::{max, Ordering};

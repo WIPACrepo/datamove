@@ -83,7 +83,6 @@ async fn main() {
     let da = Arc::clone(&disk_archiver);
     let handle_jade_process = tokio::spawn(async move {
         da.run().await;
-        shutdown_notify.notify_waiters();
     });
 
     // wait for both tasks to complete, if either one has an error

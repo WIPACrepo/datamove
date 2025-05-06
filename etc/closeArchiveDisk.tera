@@ -1,0 +1,43 @@
+datamove has filled an archival disk.
+
+Host:         {{ hostname }}
+Archive:      {{ disk_archive.description }}
+
+The filled disk has the following information.
+
+ID:           {{ disk.id }}
+Label:        {{ disk.label }}
+Copy:         {{ disk.copy_id }}
+UUID:         {{ disk.uuid }}
+
+Started:      {{ disk.date_created }}
+Finished:     {{ disk.date_updated }}
+Rate:         {{ rate_bytes_sec | comma }} bytes/sec
+
+Host:         {{ hostname }}
+Device:       {{ disk.path }}
+Free:         {{ free_bytes | comma }} bytes
+Total:        {{ total_bytes | comma }} bytes
+
+File Count:   {{ num_file_pairs | comma }}
+Data Size:    {{ size_file_pairs | comma }} bytes
+
+Please unmount, remove, and safely store this disk.
+
+Capacity Update:
+
+({{ not_mounted_paths | length }}) Not Mounted:
+{% for not_mounted_path in not_mounted_paths %}    {{ not_mounted_path }}
+{% endfor -%}
+({{ not_usable_paths | length }}) Not Usable:
+{% for not_usable_path in not_usable_paths %}    {{ not_usable_path }}
+{% endfor -%}
+({{ available_paths | length }}) Available:
+{% for available_path in available_paths %}    {{ available_path }}
+{% endfor -%}
+({{ in_use_paths | length }}) In-Use:
+{% for in_use_path in in_use_paths %}    {{ in_use_path }}
+{% endfor -%}
+({{ finished_paths | length }}) Finished:
+{% for finished_path in finished_paths %}    {{ finished_path }}
+{% endfor -%}

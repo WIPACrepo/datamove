@@ -1,0 +1,29 @@
+# Dockerfile-alma8
+
+# use Rust to compile our crate
+FROM almalinux:8.10 AS build
+RUN dnf install -y epel-release && \
+    dnf install -y \
+        gcc \
+        gcc-c++ \
+        make \
+        glibc-devel \
+        openssl-devel \
+        curl \
+        git \
+        pkg-config
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+# build the final container image
+FROM almalinux:8.10 AS image
+RUN dnf install -y \
+        openssl \
+        ca-certificates \
+    && dnf clean all
+COPY --from=build /app/target/release/disk_archiver /usr/local/bin/disk_archiver
+COPY --from=build /app/target/release/warehouse_check /usr/local/bin/warehouse_check
+COPY --from=build /app/target/release/workbench /usr/local/bin/workbench

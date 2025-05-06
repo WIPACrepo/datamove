@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# generate-rpm
+# build a container image for datamove
+
+# build the RPM in AlmaLinux 8
+docker buildx build \
+    --file Dockerfile-rpm \
+    --tag datamove:rpm-build \
+    .
+
+# create a container to copy from
+export CONTAINER_NAME="delete_me_$(date +%s)"
+docker create --name ${CONTAINER_NAME} datamove:rpm-build
+
+# copy the RPM out of the container
+docker cp ${CONTAINER_NAME}:/rpm/RPM-NAME .
+export RPM_NAME=$(<RPM-NAME)
+docker cp ${CONTAINER_NAME}:/rpm/${RPM_NAME} .
+rm RPM-NAME
+
+# delete the container now that we no longer need it
+docker rm ${CONTAINER_NAME}
+
+# delete the image now that we no longer need it
+docker image rm datamove:rpm-build

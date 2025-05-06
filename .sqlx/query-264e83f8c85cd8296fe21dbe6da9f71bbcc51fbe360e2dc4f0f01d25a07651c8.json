@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT disk_archive_sequence\n        FROM jade_disk_label\n        WHERE disk_archive_uuid = ?\n          AND copy_id = ?\n          AND disk_archive_year = ?\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "disk_archive_sequence",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "264e83f8c85cd8296fe21dbe6da9f71bbcc51fbe360e2dc4f0f01d25a07651c8"
+}

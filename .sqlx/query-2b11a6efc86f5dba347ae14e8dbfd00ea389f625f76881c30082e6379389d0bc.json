@@ -1,0 +1,94 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT * FROM jade_disk_label WHERE jade_disk_label_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jade_disk_label_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "date_created",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "date_updated",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "disk_archive_uuid",
+        "type_info": {
+          "type": "String",
+          "flags": "",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "copy_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "disk_archive_year",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "disk_archive_sequence",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2b11a6efc86f5dba347ae14e8dbfd00ea389f625f76881c30082e6379389d0bc"
+}

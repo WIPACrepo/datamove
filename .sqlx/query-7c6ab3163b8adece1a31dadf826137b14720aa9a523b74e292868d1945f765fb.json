@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO jade_file_pair (\n                archive_checksum,\n                archive_file,\n                archive_size,\n                binary_file,\n                binary_size,\n                date_archived,\n                date_created,\n                date_fetched,\n                date_processed,\n                date_updated,\n                date_verified,\n                fetch_checksum,\n                fingerprint,\n                ingest_checksum,\n                metadata_file,\n                origin_checksum,\n                date_modified_origin,\n                semaphore_file,\n                version,\n                archived_by_host_id,\n                jade_data_stream_id,\n                fetched_by_host_id,\n                processed_by_host_id,\n                verified_by_host_id,\n                jade_data_stream_uuid,\n                jade_file_pair_uuid,\n                priority_group,\n                data_warehouse_path\n            ) VALUES (\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?,\n                ?\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 28
+    },
+    "nullable": []
+  },
+  "hash": "7c6ab3163b8adece1a31dadf826137b14720aa9a523b74e292868d1945f765fb"
+}

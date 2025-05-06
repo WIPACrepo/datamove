@@ -1,0 +1,174 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT * FROM jade_disk WHERE jade_disk_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jade_disk_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bad",
+        "type_info": {
+          "type": "Bit",
+          "flags": "UNSIGNED",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "capacity",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "closed",
+        "type_info": {
+          "type": "Bit",
+          "flags": "UNSIGNED",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "copy_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "date_created",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "date_updated",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "device_path",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "label",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "on_hold",
+        "type_info": {
+          "type": "Bit",
+          "flags": "UNSIGNED",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "uuid",
+        "type_info": {
+          "type": "String",
+          "flags": "",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "version",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "jade_host_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "disk_archive_uuid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "serial_number",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "hardware_metadata",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5a746a1ff79d6eaec7ccfeec82982a48b7cabea97bf1ec235430def7793f505c"
+}

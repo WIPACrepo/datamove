@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT 1\n        FROM jade_map_disk_to_file_pair\n        WHERE jade_disk_id = ?\n          AND jade_file_pair_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "1",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6532db0844b443a65467756788719d9a82d3bc3f815813b4b270bf2a31509652"
+}

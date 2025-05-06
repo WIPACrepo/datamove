@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            select max(date_created) as latest_use\n            from jade_disk as jd\n            where jd.serial_number = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "latest_use",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "BINARY",
+          "max_size": 19
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "1331ec46de31c5d52c8a13000df0009b80160097d378d90f6d0204560b2708dd"
+}

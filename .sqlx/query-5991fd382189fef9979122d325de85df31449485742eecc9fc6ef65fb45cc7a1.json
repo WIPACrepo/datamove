@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            SELECT jade_file_pair_id\n            FROM jade_map_disk_to_file_pair\n            WHERE jade_disk_id = ?\n            ORDER BY jade_file_pair_order\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jade_file_pair_id",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5991fd382189fef9979122d325de85df31449485742eecc9fc6ef65fb45cc7a1"
+}

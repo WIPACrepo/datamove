@@ -3,7 +3,7 @@
 /// warehouse_check is a utility to perform mass verification of files
 /// located in the data warehouse. While it can be run stand-alone, it
 /// is intended to be run with multiple replicas in Kubernetes. Each
-/// replica takes a portion of the workload; i.e. running sha152sum
+/// replica takes a portion of the workload; i.e. running sha512sum
 /// commands on hundreds (or thousands) of large files.
 ///
 /// Motivation
@@ -22,7 +22,7 @@
 /// Rob Snihur identified a few PFFilt files that were corrupt.
 ///
 /// These files seem to be corrupted around that same time period.
-/// While the have a length (unlike the zero length files), the
+/// While they have a length (unlike the zero length files), the
 /// contents of the file appear to be all zero bytes (0x00).
 ///
 /// Solution
@@ -44,14 +44,13 @@
 ///
 /// The initial check file can be generated from a MySQL query against
 /// the database. Using the `split` command, it can be divided into
-/// as many works units as desired. By running multiple replicas of
+/// as many work units as desired. By running multiple replicas of
 /// warehouse_check in Kubernetes, each can consume work units
 /// independently until all of the work units are exhausted.
 ///
 /// Files that do not pass verification can send the work unit to a
 /// quarantine directory along with a note of the file(s) that caused
 /// the work unit to be quarantined for further examination.
-use log::{error, info, trace, warn};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -60,10 +59,10 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-use wipac_datamove::adhoc::utils::next_file;
+use tracing::{error, info, trace, warn};
 
-pub type Error = Box<dyn core::error::Error>;
-pub type Result<T> = core::result::Result<T, Error>;
+use wipac_datamove::adhoc::utils::next_file;
+use wipac_datamove::error::{DatamoveError, Result};
 
 #[derive(Debug)]
 pub struct Context {
@@ -217,7 +216,8 @@ fn process_file(context: &Context, file: &Path) -> Result<()> {
         note_file.flush()?;
         // indicate to the caller that the command didn't succeed
         let exit_code = output.status.code().unwrap_or(-1);
-        return Err(format!("Exit code {exit_code}: See {note_path:?}").into());
+        let msg = format!("Exit code {exit_code}: See {note_path:?}");
+        return Err(DatamoveError::Critical(msg));
     }
     // indicate to the caller that we processed the file successfully
     Ok(())

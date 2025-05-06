@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# cleanup-virtual-archival-disks
+
+# unmount and delete 12 virtual disks at /mnt/slotX
+for i in {1..12}; do
+    # unmount the virtual disk
+    sudo umount /mnt/slot${i}
+    # delete the virtual disk image
+    sudo rm -v image/slot${i}.img
+done

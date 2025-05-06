@@ -1,0 +1,18 @@
+datamove began streaming to a new archival disk.
+
+Host:         {{ hostname }}
+Archive:      {{ disk_archive.description }}
+Copy:         {{ disk.copy_id }}
+
+The mounted disk being used by the archive.
+
+Host:         {{ hostname }}
+Device:       {{ disk.path }}
+Free:         {{ free_bytes | comma }} bytes
+
+The destination disk has the following information.
+
+ID:           {{ disk.id }}
+Label:        {{ disk.label }}
+UUID:         {{ disk.uuid }}
+Started:      {{ disk.date_created }}

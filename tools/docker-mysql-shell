@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# docker-mysql-shell
+
+# connect a MySQL shell to the local MySQL database
+# for example, a test MySQL running in Docker
+docker run \
+    --interactive \
+    --name mysql-shell-$(date +%s) \
+    --network host \
+    --rm \
+    --tty=true \
+    mariadb:latest \
+    mariadb \
+    --host 127.0.0.1 \
+    --user jade \
+    --password \
+    jade

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# start-code
+
+# run this from the project root:
+# tools/start-code
+
+DATABASE_URL="mysql://jade:hunter2@127.0.0.1/jade" code datamove.code-workspace
+

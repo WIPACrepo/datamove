@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                UPDATE jade_disk_label\n                SET\n                    disk_archive_sequence = ?,\n                    date_updated = NOW()\n                WHERE disk_archive_uuid = ?\n                  AND copy_id = ?\n                  AND disk_archive_year = ?\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f5d648cdca63ff455b5b5f928af8c9c791ae68ff05bfa15683825d14424b808d"
+}

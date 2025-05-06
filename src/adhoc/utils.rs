@@ -1,9 +1,10 @@
 // utils.rs
 
-use log::{error, info, trace};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use tracing::{error, info, trace};
 
 /// Attempts to claim the next available file from the inbox directory by
 /// moving it to the work directory.

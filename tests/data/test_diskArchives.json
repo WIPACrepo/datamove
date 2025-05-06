@@ -1,0 +1,26 @@
+{
+  "diskArchives": [
+    {
+      "id": 1,
+      "uuid": "e09e65f7-37d1-45a7-9553-723a582504ef",
+      "shortName": "IceCube",
+      "name": "Disk-IceCube",
+      "description": "IceCube Disk Archive",
+      "numCopies": 2,
+      "paths": [
+        "/mnt/slot1",
+        "/mnt/slot2",
+        "/mnt/slot3",
+        "/mnt/slot4",
+        "/mnt/slot5",
+        "/mnt/slot6",
+        "/mnt/slot7",
+        "/mnt/slot8",
+        "/mnt/slot9",
+        "/mnt/slot10",
+        "/mnt/slot11",
+        "/mnt/slot12"
+      ]
+    }
+  ]
+}

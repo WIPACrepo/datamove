@@ -1,12 +1,57 @@
+# Cargo.toml
+
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.1.0"
+version = "0.3.0"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
 publish = false
 
 [dependencies]
-env_logger = "0.11.6"
-log = "0.4.22"
+axum = { version = "0.8.4", features = ["macros"] }
+axum-extra = { version = "0.10.1", features = ["erased-json"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+env_logger = "0.11.8"
+fs2 = "0.4.3"
+hostname = "0.4.1"
+lettre = "0.11.15"
+num-format = "0.4.4"
+num-traits = "0.2.19"
+rand = "0.9.1"
+regex = "1.11.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+sha2 = "0.10.9"
+sqlx = { version = "0.8.5", features = ["bigdecimal", "chrono", "mysql", "runtime-tokio", "time"] }
+tera = "1.20.0"
+thiserror = "2.0.12"
+time = "0.3.41"
+tokio = { version = "1.44.2", features = ["full"] }
+toml = "0.8.22"
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
+uuid = { version = "1.16.0", features = ["v4"] }
+
+[dev-dependencies]
+filetime = "0.2.25"
+
+[package.metadata.generate-rpm]
+release = "1.el8"
+name = "datamove"
+license = "UNLICENSED"
+assets = [
+    { source = "etc/*", dest = "/mnt/data/jade/etc", mode = "644", user = "jade", group = "jade" },
+    { source = "target/release/disk_archiver", dest = "/usr/local/jade/bin/datamove/disk_archiver", mode = "755" },
+    { source = "target/release/workbench", dest = "/usr/local/jade/bin/datamove/workbench", mode = "755" },
+]
+pre_install_script = """
+mkdir -p /mnt/data/jade/disk_work
+chown jade:jade /mnt/data/jade/disk_work
+mkdir -p /usr/local/jade/bin/datamove
+"""
+
+[package.metadata.generate-rpm.requires]
+openssl = "*"

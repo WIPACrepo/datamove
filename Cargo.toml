@@ -28,7 +28,7 @@ sqlx = { version = "0.8.5", features = ["bigdecimal", "chrono", "mysql", "runtim
 tera = "1.20.0"
 thiserror = "2.0.12"
 time = "0.3.41"
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 toml = "0.8.22"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"

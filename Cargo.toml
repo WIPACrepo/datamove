@@ -3,7 +3,7 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.3.0"
+version = "0.4.0"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
@@ -16,24 +16,24 @@ chrono = { version = "0.4.41", features = ["serde"] }
 env_logger = "0.11.8"
 fs2 = "0.4.3"
 hostname = "0.4.1"
-lettre = "0.11.15"
+lettre = "0.11.18"
 num-format = "0.4.4"
 num-traits = "0.2.19"
-rand = "0.9.1"
-regex = "1.11.1"
+rand = "0.9.2"
+regex = "1.11.2"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.143"
 sha2 = "0.10.9"
-sqlx = { version = "0.8.5", features = ["bigdecimal", "chrono", "mysql", "runtime-tokio", "time"] }
+sqlx = { version = "0.8.6", features = ["bigdecimal", "chrono", "mysql", "runtime-tokio", "time"] }
 tera = "1.20.0"
-thiserror = "2.0.12"
+thiserror = "2.0.16"
 time = "0.3.41"
-tokio = { version = "1.45.0", features = ["full"] }
-toml = "0.8.22"
+tokio = { version = "1.47.1", features = ["full"] }
+toml = "0.9.5"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-uuid = { version = "1.16.0", features = ["v4"] }
+uuid = { version = "1.18.0", features = ["v4"] }
 
 [dev-dependencies]
 filetime = "0.2.25"

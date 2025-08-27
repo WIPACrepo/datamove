@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # build-docker
-# build a container image for datamove
+# build an AlmaLinux 8 container image for datamove
 
 # get the first 12 characters of the commit hash from git as GIT_HASH
 GIT_HASH="$(git log | head -1 | awk -e '{print $2}' | head -c 12)"
 
 # build datamove, and tag it as datamove:GIT_HASH
-docker buildx build \
+docker buildx build $@ \
 	--file Dockerfile \
-	--tag datamove:${GIT_HASH} \
+	--tag datamove:${GIT_HASH}-alma8 \
 	.
 
 # since we just built datamove, tag it again as datamove:latest
-docker image tag datamove:${GIT_HASH} datamove:latest
+docker image tag datamove:${GIT_HASH}-alma8 datamove:latest-alma8

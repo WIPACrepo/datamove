@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
-use fs2::{free_space, total_space};
+use fs2::{available_space, total_space};
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
@@ -102,7 +102,7 @@ pub fn get_file_count(directory: &str) -> Result<u64> {
 
 /// TODO: write documentation comment
 pub fn get_free_space(volume: &str) -> Result<u64> {
-    match free_space(volume) {
+    match available_space(volume) {
         Ok(free) => Ok(free),
         Err(e) => {
             error!("Unable to determine free_space for '{volume}' due to: {e}");

@@ -87,3 +87,9 @@ work_cycle_sleep_seconds = 5
 # The work path where the DiskArchiver will move archive files that it
 # is currently processing.
 work_dir = "/mnt/data/jade/disk_work"
+
+# The maximum number of work units to process before 'taking a break',
+# which just means stopping the main work loop to attend to other things
+# like clearing the disk_cache of fully archived files, or processing
+# disk closing semaphores.
+work_limit_break = 1000

@@ -3,7 +3,7 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.4.0"
+version = "0.4.1"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
@@ -32,7 +32,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 toml = "0.9.5"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 uuid = { version = "1.18.0", features = ["v4"] }
 
 [dev-dependencies]

@@ -51,6 +51,10 @@ use crate::{sps::context::Context, status::sps::DiskArchiverWorkerStatus};
 
 use crate::error::{DatamoveError, Result};
 
+/// name of the semaphore indicating that the disk cache should be checked
+pub const CHECK_SEMAPHORE_NAME: &str = "check.cache";
+
+/// name of the semaphore indicating that a disk should be closed
 pub const CLOSE_SEMAPHORE_NAME: &str = "close.me";
 
 /// if we try to find a disk more than ten times, something has gone terribly wrong
@@ -780,6 +784,41 @@ pub async fn build_disk_archiver_status(disk_archiver: &DiskArchiver) -> DiskArc
 }
 
 pub async fn clean_disk_cache(disk_archiver: &DiskArchiver) -> Result<()> {
+    info!("Checking for cache check semaphore");
+    // determine the filename of the check semaphore
+    let cache_dir = &disk_archiver.context.config.sps_disk_archiver.cache_dir;
+    let path = Path::new(cache_dir);
+    let check_semaphore_path = path.join(CHECK_SEMAPHORE_NAME);
+    // determine if the check semaphore exists
+    let exists = match std::fs::exists(&check_semaphore_path) {
+        Ok(exists) => exists,
+        Err(e) => {
+            error!(
+                "Unable to determine if check semaphore '{}' exists: {e}",
+                check_semaphore_path.display()
+            );
+            false
+        }
+    };
+    // if the check semaphore does not exist
+    if !exists {
+        info!(
+            "Check semaphore {} not found. Skipping cache check.",
+            check_semaphore_path.display()
+        );
+        return Ok(());
+    }
+
+    // the check semaphore does exist, time to check the cache
+    info!("Found check semaphore: {}", check_semaphore_path.display());
+
+    // delete the semaphore from the disk
+    info!(
+        "Removing check semaphore: {}",
+        check_semaphore_path.display()
+    );
+    fs::remove_file(check_semaphore_path)?;
+
     // goal: clean the disk cache of files we no longer need to retain
     let cache_dir = &disk_archiver.context.config.sps_disk_archiver.cache_dir;
     info!("Cleaning disk cache: {}", cache_dir);
@@ -819,6 +858,17 @@ pub async fn clean_disk_cache(disk_archiver: &DiskArchiver) -> Result<()> {
 }
 
 pub async fn close_disk_by_path(disk_archiver: &DiskArchiver, disk_path: &str) -> Result<()> {
+    // determine the filename of the check semaphore
+    let cache_dir = &disk_archiver.context.config.sps_disk_archiver.cache_dir;
+    let path = Path::new(cache_dir);
+    let check_semaphore_path = path.join(CHECK_SEMAPHORE_NAME);
+    // touch the check semaphore file
+    let _ = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(check_semaphore_path)
+        .map(|_| ());
     // close the disk on the provided mount path
     info!("Closing disk: {}", disk_path);
     // determine the UUID label of the disk

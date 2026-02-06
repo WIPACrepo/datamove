@@ -3,7 +3,7 @@
 # build a container image for datamove
 
 # build the RPM in AlmaLinux 8
-docker buildx build \
+docker buildx build "$@" \
     --file Dockerfile-rpm \
     --tag datamove:rpm-build \
     .

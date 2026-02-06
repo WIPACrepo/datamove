@@ -29,7 +29,7 @@ tera = "1.20.1"
 thiserror = "2.0.18"
 time = "0.3.47"
 tokio = { version = "1.49.0", features = ["full"] }
-toml = "0.9.8"
+toml = "0.9.11+spec-1.1.0"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }

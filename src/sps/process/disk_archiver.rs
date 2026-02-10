@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use chrono::{NaiveDateTime, Utc};
-use rand::seq::SliceRandom;
 use regex::Regex;
 use tera::Tera;
 use tokio::time::{sleep, Duration};
@@ -1255,54 +1254,49 @@ async fn find_archive_copy(
     Ok(jade_disk)
 }
 
-/// search the paths of the archive to find an available (i.e.: empty) disk
+/// Search the paths of the archive to find an available (i.e.: empty) disk.
+/// 
+/// In order to cycle through all mounted disks, we search them in order, but
+/// skip available disks until we find the first UNavailable disk. After that
+/// we begin the search for an available disk. If we fall off the end of the
+/// list, we'll start over at the beginning, taking the first available disk.
 fn find_available_disk(disk_archive: &DiskArchive) -> Option<String> {
     trace!("Found {} archival disk paths", disk_archive.paths.len());
-    // shuffle the paths, so we search at random
-    let mut rng = rand::rng();
-    let mut paths = disk_archive.paths.clone();
-    paths.shuffle(&mut rng);
-    // for each path, run it through a gauntlet of checks
-    for path in &paths {
-        // if the path doesn't exist, the disk isn't mounted
-        let path_exists = match fs::exists(path) {
-            Ok(path_exists) => path_exists,
-            Err(_) => {
-                trace!("Unable to determine if {} exists; skipping.", path);
-                continue;
+    // flag: are we skipping available disks?
+    let mut skip_available = true;
+    // for each possible disk path
+    for path in &disk_archive.paths {
+        // if we're skipping available disks
+        if skip_available {
+            // if this disk is unavailable, we're now on the hunt!
+            if is_disk_available_on_path(path) == false {
+                skip_available = false;
             }
-        };
-        if !path_exists {
-            trace!("{} is not mounted; skipping.", path);
+            // available or unavailable, this isn't the disk we're looking for
             continue;
         }
-        // if we can't write there, we can't use it
-        if !is_writable_dir(path) {
-            trace!("{} cannot be written to; skipping.", path);
-            continue;
-        }
-        // if it's not a mount point, we shouldn't use it
-        if !is_mount_point(path) {
-            trace!("{} is NOT a mount point; skipping.", path);
-            continue;
-        }
-        // if we can't read the filenames in the directory
-        let uuid_count = match count_uuid_labels(path) {
-            Ok(uuid_count) => uuid_count,
-            Err(_) => {
-                trace!("{} cannot be checked for UUID labels; skipping.", path);
-                continue;
+        // otherwise, we're on the hunt for the available disk
+        else {
+            // if this disk is available
+            if is_disk_available_on_path(path) {
+                // we got one! https://www.youtube.com/watch?v=iFmNyxni-0A
+                info!("Found available archival disk {} on the first pass", path);
+                return Some(path.clone());
             }
-        };
-        // if there are any labels there
-        if uuid_count > 0 {
-            trace!("{} already has a UUID label; skipping.", path);
-            continue;
         }
-        // we survived the gauntlet; this disk is ready to be a JADE disk!
-        return Some(path.clone());
     }
-    // ut oh, we exhausted all possible paths; this is bad
+    // we fell off the end of the list. we'll try again, but be less picky this
+    // time; taking the first available disk we find
+    for path in &disk_archive.paths {
+        // if this disk is available
+        if is_disk_available_on_path(path) {
+            // we got one! https://www.youtube.com/watch?v=iFmNyxni-0A
+            info!("Found available archival disk {} on the second pass", path);
+            return Some(path.clone());
+        }
+    }
+    // rut roh shaggy, we exhausted all possible paths; this is bad
+    error!("Unable to find available archival disk; BAD MOJO");
     None
 }
 
@@ -1402,6 +1396,48 @@ async fn is_already_archived_to_copy(
     let jade_file_pair =
         find_file_pair_on_disk(pool, disk_archiver, disk_archive, copy_id, jade_file_pair).await?;
     Ok(jade_file_pair.is_some())
+}
+
+/// determine if the disk at the provided path is available (empty) and ready
+/// for use by the disk_archiver as an archival disk
+fn is_disk_available_on_path(path: &String) -> bool {
+    // if the path doesn't exist, the disk isn't mounted
+    let path_exists = match fs::exists(path) {
+        Ok(path_exists) => path_exists,
+        Err(_) => {
+            trace!("Unable to determine if {} exists; skipping.", path);
+            return false;
+        }
+    };
+    if !path_exists {
+        trace!("{} is not mounted; skipping.", path);
+        return false;
+    }
+    // if we can't write there, we can't use it
+    if !is_writable_dir(path) {
+        trace!("{} cannot be written to; skipping.", path);
+        return false;
+    }
+    // if it's not a mount point, we shouldn't use it
+    if !is_mount_point(path) {
+        trace!("{} is NOT a mount point; skipping.", path);
+        return false;
+    }
+    // if we can't read the filenames in the directory
+    let uuid_count = match count_uuid_labels(path) {
+        Ok(uuid_count) => uuid_count,
+        Err(_) => {
+            trace!("{} cannot be checked for UUID labels; skipping.", path);
+            return false;
+        }
+    };
+    // if there are any labels there
+    if uuid_count > 0 {
+        trace!("{} already has a UUID label; skipping.", path);
+        return false;
+    }
+    // we survived the gauntlet; this disk is ready to be a JADE disk!
+    return true;
 }
 
 // Verify that the provided JadeDisk is physically present and in good

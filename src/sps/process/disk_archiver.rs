@@ -1255,7 +1255,7 @@ async fn find_archive_copy(
 }
 
 /// Search the paths of the archive to find an available (i.e.: empty) disk.
-/// 
+///
 /// In order to cycle through all mounted disks, we search them in order, but
 /// skip available disks until we find the first UNavailable disk. After that
 /// we begin the search for an available disk. If we fall off the end of the
@@ -1269,7 +1269,7 @@ fn find_available_disk(disk_archive: &DiskArchive) -> Option<String> {
         // if we're skipping available disks
         if skip_available {
             // if this disk is unavailable, we're now on the hunt!
-            if is_disk_available_on_path(path) == false {
+            if !is_disk_available_on_path(path) {
                 skip_available = false;
             }
             // available or unavailable, this isn't the disk we're looking for
@@ -1437,7 +1437,7 @@ fn is_disk_available_on_path(path: &String) -> bool {
         return false;
     }
     // we survived the gauntlet; this disk is ready to be a JADE disk!
-    return true;
+    true
 }
 
 // Verify that the provided JadeDisk is physically present and in good

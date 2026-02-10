@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::SystemTime;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use num_traits::cast::ToPrimitive;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, MySql, MySqlPool, Transaction};
@@ -428,11 +428,9 @@ pub async fn get_num_file_pairs(pool: &MySqlPool, jade_disk_id: i64) -> Result<i
 
 pub async fn get_removable_files(
     pool: &MySqlPool,
-    cache_date: SystemTime,
+    _cache_date: SystemTime,
     required_copies: u64,
 ) -> Result<HashSet<String>> {
-    // determine the date of the earliest file in the cache
-    let earliest_file: DateTime<Utc> = cache_date.into();
     // query the database to determine the files ready to be deleted
     let jade_file_pair_uuids: Vec<String> = sqlx::query_scalar(
         "WITH good_disks AS (
@@ -441,7 +439,6 @@ pub async fn get_removable_files(
             WHERE closed = 1
               AND bad = 0
               AND on_hold = 0
-              AND date_created >= DATE_SUB(?, INTERVAL 30 DAY)
         ),
         file_copy_counts AS (
             SELECT jfp.jade_file_pair_uuid, COUNT(*) AS copy_count
@@ -454,7 +451,6 @@ pub async fn get_removable_files(
         FROM file_copy_counts
         WHERE copy_count >= ?",
     )
-    .bind(earliest_file)
     .bind(required_copies)
     .fetch_all(pool)
     .await?;

@@ -13,7 +13,7 @@ publish = false
 axum = { version = "0.8.8", features = ["macros"] }
 axum-extra = { version = "0.12.5", features = ["erased-json"] }
 chrono = { version = "0.4.43", features = ["serde"] }
-env_logger = "0.11.8"
+env_logger = "0.11.9"
 fs2 = "0.4.3"
 hostname = "0.4.2"
 lettre = "0.11.19"
@@ -28,11 +28,11 @@ tera = "1.20.1"
 thiserror = "2.0.18"
 time = "0.3.47"
 tokio = { version = "1.49.0", features = ["full"] }
-toml = "0.9.12+spec-1.1.0"
+toml = "1.0.2+spec-1.1.0"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-uuid = { version = "1.20.0", features = ["v4"] }
+uuid = { version = "1.21.0", features = ["v4"] }
 
 [dev-dependencies]
 filetime = "0.2.27"

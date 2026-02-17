@@ -441,13 +441,13 @@ pub async fn get_removable_files(
             WHERE closed = 1
               AND bad = 0
               AND on_hold = 0
-              AND date_created >= DATE_SUB(?, INTERVAL 30 DAY)
         ),
         file_copy_counts AS (
             SELECT jfp.jade_file_pair_uuid, COUNT(*) AS copy_count
             FROM jade_map_disk_to_file_pair jmdfp
             JOIN good_disks gd ON jmdfp.jade_disk_id = gd.jade_disk_id
             JOIN jade_file_pair jfp ON jmdfp.jade_file_pair_id = jfp.jade_file_pair_id
+            WHERE jfp.date_created >= DATE_SUB(?, INTERVAL 2 DAY)
             GROUP BY jfp.jade_file_pair_uuid
         )
         SELECT jade_file_pair_uuid

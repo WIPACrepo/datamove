@@ -1071,7 +1071,7 @@ pub async fn create_archival_disk_file(
             .binary_size
             .expect("jade_file_pair.binary_size IS null"),
         data_stream_uuid: jade_file_pair
-            .jade_file_pair_uuid
+            .jade_data_stream_uuid
             .clone()
             .expect("jade_file_pair.jade_file_pair_uuid IS null"),
         data_warehouse_path: jade_file_pair

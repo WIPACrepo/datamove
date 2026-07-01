@@ -3,7 +3,7 @@
 [package]
 name = "wipac_datamove"
 authors = ["Patrick Meade <pmeade@icecube.wisc.edu>"]
-version = "0.5.0"
+version = "0.6.0"
 repository = "https://github.com/WIPACrepo/datamove"
 description = "Modern data movement components"
 edition = "2021"
@@ -38,7 +38,7 @@ uuid = { version = "1.21.0", features = ["v4"] }
 filetime = "0.2.27"
 
 [package.metadata.generate-rpm]
-release = "2.el8"
+release = "1.el8"
 name = "jade-datamove"
 license = "UNLICENSED"
 assets = [

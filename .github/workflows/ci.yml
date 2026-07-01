@@ -12,6 +12,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  deps:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/ci/check_rust_deps
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -25,7 +32,6 @@ jobs:
             lint-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
             lint-cache-${{ runner.os }}-
       - run: rustup update stable && rustup default stable
-      - run: tools/ci/check_rust_deps
       - name: Run cargo install cargo-machete
         run: |
           if [ ! -f ~/.cargo/bin/cargo-machete ]; then

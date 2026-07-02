@@ -18,7 +18,9 @@ use crate::config::{
     load_contacts, load_data_streams, load_disk_archives, Contacts, DataStream, DataStreams,
     DiskArchive, DiskArchives,
 };
-use crate::metadata::{ArchivalDiskFile, ArchivalDiskMetadata};
+use crate::metadata::{
+    ArchivalDiskFile, ArchivalDiskMetadata, ARCHIVAL_DISK_FILE_METADATA_SCHEMA_VERSION,
+};
 use crate::sps::email::{
     comma_separated_filter, compile_templates, send_email_disk_full, send_email_disk_started,
 };
@@ -1130,6 +1132,7 @@ pub async fn create_archival_disk_file(
             .jade_file_pair_uuid
             .clone()
             .expect("jade_file_pair.uuid IS null"),
+        version: ARCHIVAL_DISK_FILE_METADATA_SCHEMA_VERSION,
     }
 }
 

@@ -129,7 +129,6 @@ pub struct ArchivalDiskFile {
     //       Note, it's also in the JADE database and the file pair archive.
     // #[serde(rename = "xmlMetadata")]
     // pub xml_metadata: String,
-
     /// the version of the ArchivalDiskFile metadata schema
     /// if you need more than 2 billion metadata schema versions,
     /// https://knowyourmeme.com/memes/stop-it-get-some-help

@@ -18,7 +18,9 @@ use crate::config::{
     load_contacts, load_data_streams, load_disk_archives, Contacts, DataStream, DataStreams,
     DiskArchive, DiskArchives,
 };
-use crate::metadata::{ARCHIVAL_DISK_FILE_METADATA_SCHEMA_VERSION, ArchivalDiskFile, ArchivalDiskMetadata};
+use crate::metadata::{
+    ArchivalDiskFile, ArchivalDiskMetadata, ARCHIVAL_DISK_FILE_METADATA_SCHEMA_VERSION,
+};
 use crate::sps::email::{
     comma_separated_filter, compile_templates, send_email_disk_full, send_email_disk_started,
 };

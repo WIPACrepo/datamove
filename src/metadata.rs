@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::sps::jade_db::service::disk::JadeDisk;
 
+/// the current version of the schema describing the metadata of an ArchivalDiskFile
+pub const ARCHIVAL_DISK_FILE_METADATA_SCHEMA_VERSION: i32 = 2;
+
 /// metadata for an archival disk
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ArchivalDiskMetadata {
@@ -126,4 +129,10 @@ pub struct ArchivalDiskFile {
     //       Note, it's also in the JADE database and the file pair archive.
     // #[serde(rename = "xmlMetadata")]
     // pub xml_metadata: String,
+
+    /// the version of the ArchivalDiskFile metadata schema
+    /// if you need more than 2 billion metadata schema versions,
+    /// https://knowyourmeme.com/memes/stop-it-get-some-help
+    #[serde(rename = "version")]
+    pub version: i32,
 }

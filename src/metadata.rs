@@ -131,7 +131,7 @@ pub struct ArchivalDiskFile {
     // pub xml_metadata: String,
     /// the version of the ArchivalDiskFile metadata schema
     /// if you need more than 2 billion metadata schema versions,
-    /// https://knowyourmeme.com/memes/stop-it-get-some-help
+    /// <https://knowyourmeme.com/memes/stop-it-get-some-help>
     #[serde(rename = "version")]
     pub version: i32,
 }
